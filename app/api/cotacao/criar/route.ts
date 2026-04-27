@@ -11,6 +11,7 @@ import { gerarDistribuicaoBudgetPorFormato, gerarMixMidia } from '@/lib/ia/media
 import { gerarExplicacaoComercial } from '@/lib/ia/explainer';
 import { validarPlanoMidia } from '@/lib/ia/validator';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
+import type { Prisma } from '@prisma/client';
 
 const CANAIS_VALIDOS = [
   'DISPLAY_PROGRAMATICO',
@@ -42,9 +43,10 @@ function filtrarERenormalizarMix(
       ...item,
       canal: normalizarCanalResposta(item.canal),
     }))
-    .filter((item): item is { canal: CanalValido; percentual: number; justificativa?: string } =>
-      Boolean(item.canal) && setPermitidos.has(item.canal)
-    );
+    .filter((item): item is { canal: CanalValido; percentual: number; justificativa?: string } => {
+      const canal = item.canal;
+      return canal !== null && setPermitidos.has(canal);
+    });
 
   if (mixFiltrado.length === 0) {
     return canaisPermitidos.length > 0
@@ -222,9 +224,9 @@ export async function POST(request: NextRequest) {
           ...mixResultado,
           mix: mixNormalizado,
           distribuicaoFormatos,
-        },
-        precosSugeridos: precosCalculados,
-        estimativas,
+        } as unknown as Prisma.InputJsonValue,
+        precosSugeridos: precosCalculados as unknown as Prisma.InputJsonValue,
+        estimativas: estimativas as unknown as Prisma.InputJsonValue,
         status: 'RASCUNHO',
       },
     });
@@ -284,7 +286,7 @@ export async function POST(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, error: 'Dados inválidos', details: error.errors },
+        { success: false, error: 'Dados inválidos', details: error.issues },
         { status: 400 }
       );
     }

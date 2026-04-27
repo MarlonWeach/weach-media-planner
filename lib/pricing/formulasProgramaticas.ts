@@ -235,10 +235,30 @@ export function calcularTodosPrecosProgramaticos(
   }
 ) {
   const display = calcularPrecosDisplay(cpmBase, valoresFixos?.display ?? {});
-  const video = calcularPrecosVideo(cpmBase, valoresFixos?.video ?? {});
-  const ctv = calcularPrecosCTV(video.cpvVideo30, cpmBase, valoresFixos?.ctv);
-  const audio = calcularPrecosAudio(video.cpvVideo30, valoresFixos?.audio);
-  const social = calcularPrecosSocial(cpmBase, valoresFixos?.social);
+  const videoFix = valoresFixos?.video;
+  const video = calcularPrecosVideo(cpmBase, {
+    spotifyVideo30: videoFix?.cpvSpotifyVideo30,
+    deezerVideo30: videoFix?.cpvDeezerVideo30,
+  });
+  const ctvFix = valoresFixos?.ctv;
+  const ctv = calcularPrecosCTV(video.cpvVideo30, cpmBase, {
+    globoPlay15: ctvFix?.cpvGloboPlay15,
+    samsungFast: ctvFix?.cpvSamsungFast,
+    philipsAoc: ctvFix?.cpvPhilipsAoc,
+    maxNetflixDisney: ctvFix?.cpvMaxNetflixDisney,
+  });
+  const audioFix = valoresFixos?.audio;
+  const audio = calcularPrecosAudio(video.cpvVideo30, {
+    spotifyAudio: audioFix?.spotifyAudioCpm,
+    deezerAudio: audioFix?.deezerAudioCpm,
+  });
+  const socialFix = valoresFixos?.social;
+  const social = calcularPrecosSocial(cpmBase, {
+    linkedinSponsored: socialFix?.linkedinSponsored,
+    linkedinInmail: socialFix?.linkedinInmail,
+    kwai: socialFix?.kwai,
+    fbLeadAd: socialFix?.fbLeadAd,
+  });
 
   return {
     display,

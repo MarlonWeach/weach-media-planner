@@ -7,6 +7,8 @@
 import PDFDocument from 'pdfkit/js/pdfkit.standalone';
 import fs from 'fs';
 
+type PDFKitDocument = InstanceType<typeof PDFDocument>;
+
 // Cores da identidade visual Weach
 const CORES = {
   PRIMARY: '#2E5FF2',
@@ -88,7 +90,7 @@ export async function gerarPDF(
   });
 }
 
-function adicionarCabecalho(doc: PDFDocument, dados: DadosCotacao) {
+function adicionarCabecalho(doc: PDFKitDocument, dados: DadosCotacao) {
   // Logo (se existir)
   // TODO: Adicionar logo quando disponível
   // const logoPath = path.join(process.cwd(), 'public', 'logo-weach.png');
@@ -143,7 +145,7 @@ function adicionarCabecalho(doc: PDFDocument, dados: DadosCotacao) {
 }
 
 function adicionarResumoExecutivo(
-  doc: PDFDocument,
+  doc: PDFKitDocument,
   dados: DadosCotacao
 ) {
   doc
@@ -180,7 +182,7 @@ function adicionarResumoExecutivo(
   doc.moveDown(1.5);
 }
 
-function adicionarPlanoMidia(doc: PDFDocument, dados: DadosCotacao) {
+function adicionarPlanoMidia(doc: PDFKitDocument, dados: DadosCotacao) {
   doc
     .fontSize(16)
     .fillColor(CORES.PRIMARY_DARK)
@@ -310,7 +312,7 @@ function adicionarPlanoMidia(doc: PDFDocument, dados: DadosCotacao) {
   doc.y = currentY + rowHeight + 10;
 }
 
-function adicionarEstimativas(doc: PDFDocument, dados: DadosCotacao) {
+function adicionarEstimativas(doc: PDFKitDocument, dados: DadosCotacao) {
   doc
     .fontSize(16)
     .fillColor(CORES.PRIMARY_DARK)
@@ -391,7 +393,7 @@ function adicionarEstimativas(doc: PDFDocument, dados: DadosCotacao) {
   doc.y = startY + estimativas.length * rowHeight + 10;
 }
 
-function adicionarRodape(doc: PDFDocument, dados: DadosCotacao) {
+function adicionarRodape(doc: PDFKitDocument, dados: DadosCotacao) {
   const pageHeight = doc.page.height;
   const footerY = pageHeight - 100;
 

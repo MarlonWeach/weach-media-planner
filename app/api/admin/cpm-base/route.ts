@@ -35,8 +35,13 @@ export async function GET(request: NextRequest) {
 
     let valor = 4.0; // Valor padrão
 
-    if (config && typeof config.valor === 'object' && 'valor' in config.valor) {
-      valor = Number((config.valor as any).valor) ?? 4.0;
+    if (
+      config?.valor != null &&
+      typeof config.valor === 'object' &&
+      !Array.isArray(config.valor) &&
+      'valor' in config.valor
+    ) {
+      valor = Number((config.valor as { valor?: unknown }).valor) || 4.0;
     }
 
     // Busca histórico de alterações (filtrando por campo = 'CPM_BASE')
@@ -102,8 +107,13 @@ export async function PUT(request: NextRequest) {
     });
 
     let valorAnterior = 4.0;
-    if (configAtual && typeof configAtual.valor === 'object' && 'valor' in configAtual.valor) {
-      valorAnterior = Number((configAtual.valor as any).valor) ?? 4.0;
+    if (
+      configAtual?.valor != null &&
+      typeof configAtual.valor === 'object' &&
+      !Array.isArray(configAtual.valor) &&
+      'valor' in configAtual.valor
+    ) {
+      valorAnterior = Number((configAtual.valor as { valor?: unknown }).valor) || 4.0;
     }
 
     // Atualiza ou cria configuração
@@ -139,7 +149,7 @@ export async function PUT(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, error: 'Dados inválidos', details: error.errors },
+        { success: false, error: 'Dados inválidos', details: error.issues },
         { status: 400 }
       );
     }

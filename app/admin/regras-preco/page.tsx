@@ -85,9 +85,10 @@ export default function AdminRegrasPrecoPage() {
     if (isAdmin) carregarRegras();
   }, [isAdmin]);
 
-  const authHeaders = (): HeadersInit => {
+  const authHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('auth_token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    if (!token) return {};
+    return { Authorization: `Bearer ${token}` };
   };
 
   const carregarRegras = async () => {

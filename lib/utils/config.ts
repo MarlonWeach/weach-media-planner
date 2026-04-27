@@ -13,8 +13,13 @@ export async function obterCpmBase(): Promise<number> {
       where: { chave: 'CPM_BASE_PROGRAMATICO' },
     });
 
-    if (config && typeof config.valor === 'object' && 'valor' in config.valor) {
-      return Number((config.valor as any).valor) ?? 4;
+    if (
+      config?.valor != null &&
+      typeof config.valor === 'object' &&
+      !Array.isArray(config.valor) &&
+      'valor' in config.valor
+    ) {
+      return Number((config.valor as { valor?: unknown }).valor) || 4;
     }
 
     return 4; // Valor padrão

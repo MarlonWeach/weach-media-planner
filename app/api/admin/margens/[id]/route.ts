@@ -84,7 +84,7 @@ export async function PUT(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, error: 'Dados inválidos', details: error.errors },
+        { success: false, error: 'Dados inválidos', details: error.issues },
         { status: 400 }
       );
     }
@@ -151,7 +151,7 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, error: 'Dados inválidos', details: error.errors },
+        { success: false, error: 'Dados inválidos', details: error.issues },
         { status: 400 }
       );
     }

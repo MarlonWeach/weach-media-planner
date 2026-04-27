@@ -179,7 +179,7 @@ export default function AdminCpmBasePage() {
             type="error"
             title="Erro"
             message={error}
-            onClose={() => setError(null)}
+            onDismiss={() => setError(null)}
           />
         )}
 
@@ -188,7 +188,7 @@ export default function AdminCpmBasePage() {
             type="success"
             title="Sucesso"
             message={success}
-            onClose={() => setSuccess(null)}
+            onDismiss={() => setSuccess(null)}
           />
         )}
 

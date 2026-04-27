@@ -62,9 +62,10 @@ export default function AdminPisosTetosPage() {
     if (isAdmin) carregar();
   }, [isAdmin]);
 
-  const authHeaders = () => {
+  const authHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('auth_token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    if (!token) return {};
+    return { Authorization: `Bearer ${token}` };
   };
 
   const carregar = async () => {

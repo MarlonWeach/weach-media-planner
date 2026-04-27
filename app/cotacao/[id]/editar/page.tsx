@@ -11,6 +11,7 @@ import { WizardStep1, Step1Data } from '@/components/cotacao/WizardStep1';
 import { WizardStep2, Step2Data } from '@/components/cotacao/WizardStep2';
 import { WizardStep3, Step3Data } from '@/components/cotacao/WizardStep3';
 import { WizardStep4 } from '@/components/cotacao/WizardStep4';
+import dayjs from 'dayjs';
 
 type WizardStep = 1 | 2 | 3 | 4;
 
@@ -61,27 +62,45 @@ export default function EditarCotacaoPage({
         setCurrentStep(1);
       }
 
-      // Preenche dados dos passos
+      const dataInicioStr =
+        typeof cotacao.dataInicio === 'string'
+          ? cotacao.dataInicio.split('T')[0]
+          : dayjs(cotacao.dataInicio).format('YYYY-MM-DD');
+      const dataFimStr =
+        typeof cotacao.dataFim === 'string'
+          ? cotacao.dataFim.split('T')[0]
+          : dayjs(cotacao.dataFim).format('YYYY-MM-DD');
+
+      // Preenche dados dos passos (formato alinhado a Step1/2/3)
       setWizardData({
         step1: {
-          clienteNome: cotacao.clienteNome,
+          solicitanteId:
+            (cotacao.solicitanteId && String(cotacao.solicitanteId).trim()) || '—',
+          solicitanteNome: cotacao.solicitanteNome?.trim() || 'Não informado',
+          solicitanteEmail: cotacao.solicitanteEmail?.trim() || 'nao-informado@exemplo.com',
+          dataSolicitacao: dayjs(cotacao.createdAt).format('YYYY-MM-DDTHH:mm'),
+          anuncianteCampanha: cotacao.clienteNome || 'Campanha',
+          agenciaId: cotacao.agenciaId ?? undefined,
+          agenciaNome: cotacao.agenciaNome ?? undefined,
+          clienteNome: cotacao.clienteNome ?? undefined,
           clienteSegmento: cotacao.clienteSegmento,
           urlLp: cotacao.urlLp,
-          observacoes: cotacao.observacoes,
+          cotacaoProativa: false,
+          observacoes: cotacao.observacoes ?? undefined,
         },
         step2: {
           objetivo: cotacao.objetivo,
+          definicaoCampanha: ['PROGRAMATICA'],
           maturidadeDigital: cotacao.maturidadeDigital,
           aceitaModeloHibrido: cotacao.aceitaModeloHibrido,
           risco: cotacao.risco,
-        },
+        } as Step2Data,
         step3: {
-          budget: cotacao.budget,
-          dataInicio: cotacao.dataInicio.split('T')[0],
-          dataFim: cotacao.dataFim.split('T')[0],
-          regiao: cotacao.regiao,
-          mixManual: undefined,
-        },
+          budget: Number(cotacao.budget),
+          dataInicio: dataInicioStr,
+          dataFim: dataFimStr,
+          tipoRegiao: 'NACIONAL',
+        } as Step3Data,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar cotação');

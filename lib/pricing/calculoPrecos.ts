@@ -175,11 +175,22 @@ export async function obterDiagnosticoPricing(): Promise<DiagnosticoPricing> {
     }),
   ]);
 
+  type MargemRow = {
+    id: string;
+    canal: string;
+    margemMinima: unknown;
+    origem?: string | null;
+    ativo: boolean;
+  };
+
   return {
     valoresFixosMapeados,
-    margensMinimasAtivas: margensMinimasAtivas.map((item) => ({
-      ...item,
+    margensMinimasAtivas: (margensMinimasAtivas as MargemRow[]).map((item) => ({
+      id: item.id,
+      canal: item.canal,
       margemMinima: Number(item.margemMinima),
+      origem: item.origem ?? '',
+      ativo: item.ativo,
     })),
     regrasAtivas: regrasAtivas.map((item) => ({
       ...item,

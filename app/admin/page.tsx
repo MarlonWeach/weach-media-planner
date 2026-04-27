@@ -36,7 +36,14 @@ export default function AdminPage() {
     return null;
   }
 
-  const menuItems = [
+  const menuItems: {
+    title: string;
+    description: string;
+    href: string;
+    icon: string;
+    color: string;
+    disabled?: boolean;
+  }[] = [
     {
       title: 'CPM Base Programático',
       description: 'Editar o valor central (D3) que determina todos os preços',

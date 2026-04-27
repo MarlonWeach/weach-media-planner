@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,7 +21,7 @@ const schemaLogin = z.object({
 
 type LoginFormData = z.infer<typeof schemaLogin>;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, isAuthenticated, loading: authLoading } = useAuth();
@@ -170,3 +170,19 @@ export default function LoginPage() {
   );
 }
 
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4" />
+            <p className="text-gray-600">Carregando...</p>
+          </div>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}

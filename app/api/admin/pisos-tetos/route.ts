@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: 'Dados inválidos', details: error.errors }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Dados inválidos', details: error.issues }, { status: 400 });
     }
     console.error('Erro ao criar piso/teto:', error);
     return NextResponse.json({ success: false, error: 'Erro ao criar piso/teto' }, { status: 500 });

@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: 'Dados inválidos', details: error.errors }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Dados inválidos', details: error.issues }, { status: 400 });
     }
     console.error('Erro ao atualizar piso/teto:', error);
     return NextResponse.json({ success: false, error: 'Erro ao atualizar piso/teto' }, { status: 500 });
@@ -104,7 +104,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: 'Dados inválidos', details: error.errors }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Dados inválidos', details: error.issues }, { status: 400 });
     }
     console.error('Erro ao atualizar status de piso/teto:', error);
     return NextResponse.json({ success: false, error: 'Erro ao atualizar status de piso/teto' }, { status: 500 });
