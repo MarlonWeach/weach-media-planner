@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 const DEFAULT_SOLICITANTES = [
   { id: '11111111-1111-4111-8111-111111111111', nome: 'Marlon Nogueira', email: 'marlon@weachgroup.net' },
 ];
