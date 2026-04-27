@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model wp_Usuario {
+  id        String                 @id @default(uuid())
+  nome      String
+  email     String                 @unique
+  senhaHash String
+  role      Role
+  ativo     Boolean                @default(true)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  cotacoes  wp_Cotacao[]
+  logsPreco wp_LogAlteracaoPreco[]
+
+  @@index([role])
+  @@index([ativo])
+}
+
+model wp_Cotacao {
+  id                  String                 @id @default(uuid())
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  clienteNome         String
+  clienteSegmento     Segmento
+  urlLp               String
+  objetivo            Objetivo
+  budget              Decimal                @db.Decimal(18, 2)
+  dataInicio          DateTime
+  dataFim             DateTime
+  regiao              Regiao
+  maturidadeDigital   MaturidadeDigital
+  risco               ToleranciaRisco
+  aceitaModeloHibrido Boolean                @default(false)
+  observacoes         String?
+  solicitanteId       String?
+  solicitanteNome     String?
+  solicitanteEmail    String?
+  agenciaId           String?
+  agenciaNome         String?
+  mixSugerido         Json
+  precosSugeridos     Json
+  estimativas         Json
+  pdfUrl              String?
+  status              StatusCotacao          @default(RASCUNHO)
+  vendedorId          String
+  vendedor            wp_Usuario             @relation(fields: [vendedorId], references: [id])
+  solicitante         wp_Solicitante?        @relation(fields: [solicitanteId], references: [id])
+  agencia             wp_Agencia?            @relation(fields: [agenciaId], references: [id])
+  historicoIA         wp_HistoricoIA[]
+  logsPreco           wp_LogAlteracaoPreco[]
+
+  @@index([clienteSegmento])
+  @@index([regiao])
+  @@index([objetivo])
+  @@index([status])
+  @@index([createdAt])
+  @@index([vendedorId])
+  @@index([solicitanteId])
+  @@index([agenciaId])
+}
+
+model wp_Solicitante {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cotacoes  wp_Cotacao[]
+
+  @@index([ativo])
+  @@index([nome])
+}
+
+model wp_Agencia {
+  id        String   @id @default(uuid())
+  nome      String   @unique
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cotacoes  wp_Cotacao[]
+
+  @@index([ativo])
+}
+
+model wp_PrecoBase {
+  id           String          @id @default(uuid())
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  canal        CanalInventario
+  segmento     Segmento?
+  regiao       Regiao?
+  formato      String?
+  modeloCompra ModeloCompra
+  precoMin     Decimal         @db.Decimal(18, 4)
+  precoAlvo    Decimal         @db.Decimal(18, 4)
+  precoMax     Decimal         @db.Decimal(18, 4)
+  ativo        Boolean         @default(true)
+
+  @@index([canal])
+  @@index([segmento])
+  @@index([regiao])
+  @@index([modeloCompra])
+  @@index([ativo])
+}
+
+model wp_ValorFixoPreco {
+  id           String          @id @default(uuid())
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  tipoRegra    String          @default("FIXO")
+  canal        CanalInventario
+  formato      String?
+  modeloCompra ModeloCompra
+  nomeRegra    String?
+  valor        Decimal         @db.Decimal(18, 4)
+  formula      String?
+  condicoes    Json?
+  faixaMin     Decimal?        @db.Decimal(18, 2)
+  faixaMax     Decimal?        @db.Decimal(18, 2)
+  unidade      String
+  origem       String          @default("MANUAL")
+  ordem        Int?
+  ativo        Boolean         @default(true)
+
+  @@index([tipoRegra])
+  @@index([canal])
+  @@index([modeloCompra])
+  @@index([ativo])
+}
+
+model wp_MargemMinima {
+  id           String          @id @default(uuid())
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  canal        CanalInventario
+  margemMinima Decimal         @db.Decimal(5, 2)
+  descricao    String?
+  origem       String          @default("MANUAL")
+  ativo        Boolean         @default(true)
+
+  @@unique([canal])
+  @@index([ativo])
+}
+
+model wp_LogAlteracaoPreco {
+  id            String     @id @default(uuid())
+  createdAt     DateTime   @default(now())
+  cotacaoId     String
+  usuarioId     String
+  campo         String
+  valorAnterior String
+  valorNovo     String
+  motivo        String
+  cotacao       wp_Cotacao @relation(fields: [cotacaoId], references: [id])
+  usuario       wp_Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([cotacaoId])
+  @@index([usuarioId])
+  @@index([createdAt])
+}
+
+model wp_HistoricoIA {
+  id            String         @id @default(uuid())
+  createdAt     DateTime       @default(now())
+  cotacaoId     String
+  tipo          TipoIARegistro
+  promptEnviado String
+  respostaIa    String
+  modeloUsado   String
+  cotacao       wp_Cotacao     @relation(fields: [cotacaoId], references: [id])
+
+  @@index([cotacaoId])
+  @@index([tipo])
+  @@index([createdAt])
+}
+
+model wp_Configuracao {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  chave     String   @unique
+  valor     Json
+  descricao String?
+  ativo     Boolean  @default(true)
+
+  @@index([ativo])
+}
+
+enum Role {
+  ADMIN
+  COMERCIAL
+  EXTERNO
+}
+
+enum Segmento {
+  AUTOMOTIVO
+  FINANCEIRO
+  VAREJO
+  IMOBILIARIO
+  SAUDE
+  EDUCACAO
+  TELECOM
+  SERVICOS
+  OUTROS
+}
+
+enum Objetivo {
+  AWARENESS
+  CONSIDERACAO
+  LEADS
+  VENDAS
+}
+
+enum MaturidadeDigital {
+  BAIXA
+  MEDIA
+  ALTA
+}
+
+enum ToleranciaRisco {
+  BAIXA
+  MEDIA
+  ALTA
+}
+
+enum Regiao {
+  NACIONAL
+  SP_CAPITAL
+  SUDESTE_EXCETO_SP
+  SUL
+  CENTRO_OESTE
+  NORDESTE
+  NORTE
+  CIDADES_MENORES
+}
+
+enum StatusCotacao {
+  RASCUNHO
+  ENVIADA
+  APROVADA
+  RECUSADA
+  EM_EXECUCAO
+  FINALIZADA
+  AGUARDANDO_APROVACAO
+}
+
+enum TipoIARegistro {
+  PLANO_MIDIA
+  EXPLICACAO
+  OTIMIZACAO_PRECO
+  VALIDACAO
+}
+
+enum CanalInventario {
+  DISPLAY_PROGRAMATICO
+  VIDEO_PROGRAMATICO
+  CTV
+  AUDIO_DIGITAL
+  SOCIAL_PROGRAMATICO
+  CRM_MEDIA
+  IN_LIVE
+  CPL_CPI
+}
+
+enum ModeloCompra {
+  CPM
+  CPC
+  CPV
+  CPCL
+  CPL
+  CPI
+  CPD
+  PACOTE
+}
