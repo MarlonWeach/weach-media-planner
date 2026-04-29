@@ -14,6 +14,7 @@ interface EstimativasCardProps {
     cpmEstimado: number;
     cpcEstimado: number;
     cplEstimado: number;
+    exibirMetricasLeads?: boolean;
   };
   budgetTotal: number;
 }
@@ -57,39 +58,44 @@ export function EstimativasCard({
       texto: 'text-green-800',
     },
     {
-      titulo: 'Leads',
-      valor: formatarNumero(estimativas.leads),
-      descricao: 'Leads estimados',
-      cor: 'bg-purple-50 border-purple-200',
-      texto: 'text-purple-800',
-    },
-    {
-      titulo: 'CPM',
+      titulo: 'eCPM',
       valor: formatarMoeda(estimativas.cpmEstimado),
       descricao: 'Custo por mil impressões',
       cor: 'bg-yellow-50 border-yellow-200',
       texto: 'text-yellow-800',
     },
     {
-      titulo: 'CPC',
+      titulo: 'eCPC',
       valor: formatarMoeda(estimativas.cpcEstimado),
       descricao: 'Custo por clique',
       cor: 'bg-orange-50 border-orange-200',
       texto: 'text-orange-800',
     },
-    {
-      titulo: 'CPL',
-      valor: formatarMoeda(estimativas.cplEstimado),
-      descricao: 'Custo por lead',
-      cor: 'bg-pink-50 border-pink-200',
-      texto: 'text-pink-800',
-    },
   ];
+
+  if (estimativas.exibirMetricasLeads) {
+    cards.push(
+      {
+        titulo: 'Leads',
+        valor: formatarNumero(estimativas.leads),
+        descricao: 'Leads estimados',
+        cor: 'bg-purple-50 border-purple-200',
+        texto: 'text-purple-800',
+      },
+      {
+        titulo: 'CPL',
+        valor: formatarMoeda(estimativas.cplEstimado),
+        descricao: 'Custo por lead',
+        cor: 'bg-pink-50 border-pink-200',
+        texto: 'text-pink-800',
+      }
+    );
+  }
 
   return (
     <div>
       <h3 className="text-lg font-semibold text-gray-900 mb-4">
-        Estimativas de Resultados
+        Estimativas de Resultados do Plano de Mídia Completo
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map((card, index) => (
@@ -117,7 +123,7 @@ export function EstimativasCard({
           </div>
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="text-sm text-gray-600">Taxa de Clique (CTR)</div>
+          <div className="text-sm text-gray-600">Taxa de Clique (eCTR)</div>
           <div className="text-xl font-bold text-gray-900">
             {estimativas.impressoes > 0
               ? ((estimativas.cliques / estimativas.impressoes) * 100).toFixed(2)

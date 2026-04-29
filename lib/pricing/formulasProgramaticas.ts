@@ -56,6 +56,10 @@ function arredondarParaCima2Casas(valor: number): number {
   return Math.ceil(valor * 100) / 100;
 }
 
+function arredondarParaCima3Casas(valor: number): number {
+  return Math.ceil(valor * 1000) / 1000;
+}
+
 /**
  * Calcula preços de Display baseados no CPM base (D3)
  */
@@ -86,16 +90,16 @@ export function calcularPrecosVideo(cpmBase: number, valoresFixos: {
   deezerVideo30?: number;
 }): PrecoVideo {
   // CPV base vídeo 30" = D3 / 115
-  const cpvVideo30 = arredondarParaCima2Casas(cpmBase / 115);
-  const cpvVideo15 = arredondarParaCima2Casas(cpvVideo30 * 0.85);
+  const cpvVideo30 = arredondarParaCima3Casas(cpmBase / 115);
+  const cpvVideo15 = arredondarParaCima3Casas(cpvVideo30 * 0.85);
   
   return {
     cpvVideo15,
     cpvVideo30,
     cpvYoutubeBumper6: cpvVideo15,
-    cpvYoutube30: arredondarParaCima2Casas(cpvVideo30 * 2),
-    cpvSpotifyVideo30: arredondarParaCima2Casas(valoresFixos.spotifyVideo30 ?? 0.25),
-    cpvDeezerVideo30: arredondarParaCima2Casas(valoresFixos.deezerVideo30 ?? 0.25),
+    cpvYoutube30: arredondarParaCima3Casas(cpvVideo30 * 2),
+    cpvSpotifyVideo30: arredondarParaCima3Casas(valoresFixos.spotifyVideo30 ?? 0.25),
+    cpvDeezerVideo30: arredondarParaCima3Casas(valoresFixos.deezerVideo30 ?? 0.25),
   };
 }
 

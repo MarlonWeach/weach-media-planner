@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { PricingTable } from './PricingTable';
 import { AlertBox } from './AlertBox';
 import { EstimativasCard } from './EstimativasCard';
@@ -41,6 +41,13 @@ interface FormatoSelecionado {
   modeloCompra: string;
 }
 
+const CTR_DISPLAY_CPM = 0.004; // 0,40%
+const CTR_SOCIAL = 0.02; // 2%
+const VIDEO_CVR_15S = 0.8; // 80%
+const VIDEO_CVR_30S = 0.75; // 75%
+const VIDEO_CVR_CTV = 0.95; // 95%
+const VIDEO_CVR_DEFAULT = 0.75;
+
 interface WizardStep4Props {
   dadosPassos: {
     step1: any;
@@ -49,12 +56,26 @@ interface WizardStep4Props {
   };
   onBack: () => void;
   onSave?: (cotacaoId: string) => void;
+  cotacaoExistente?: {
+    id: string;
+    mix?: Array<{
+      canal?: string;
+      formato?: string;
+      modeloCompra?: string;
+      percentual?: number;
+      valorBudget?: number;
+      precoUnitario?: number;
+      preco?: number;
+      entregaEstimada?: number;
+    }>;
+  } | null;
 }
 
 export function WizardStep4({
   dadosPassos,
   onBack,
   onSave,
+  cotacaoExistente = null,
 }: WizardStep4Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +83,7 @@ export function WizardStep4({
   const [cotacaoId, setCotacaoId] = useState<string | null>(null);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [erroAjuste, setErroAjuste] = useState<string | null>(null);
+  const inicializacaoExecutadaRef = useRef(false);
 
   const obterHeadersAutenticacao = (): HeadersInit | null => {
     const token = localStorage.getItem('auth_token');
@@ -74,8 +96,66 @@ export function WizardStep4({
     };
   };
 
-  // Gera a cotação ao montar o componente
+  const carregarItensSalvos = () => {
+    if (!cotacaoExistente?.id || !Array.isArray(cotacaoExistente.mix) || cotacaoExistente.mix.length === 0) {
+      return false;
+    }
+
+    const itensRestaurados = cotacaoExistente.mix
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => {
+        const canal = typeof item.canal === 'string' ? item.canal : 'DISPLAY_PROGRAMATICO';
+        const formato = typeof item.formato === 'string' ? item.formato : obterFormatoCanal(canal);
+        const modeloCompra = typeof item.modeloCompra === 'string' ? item.modeloCompra : obterModeloCompra(canal);
+        const percentualBudget = Number(item.percentual ?? 0);
+        const valorBudget =
+          Number.isFinite(Number(item.valorBudget))
+            ? Number(item.valorBudget)
+            : (dadosPassos.step3.budget * percentualBudget) / 100;
+        const preco = Number(item.precoUnitario ?? item.preco ?? 0);
+        const precoSeguro = Number.isFinite(preco) && preco > 0 ? preco : 0;
+
+        return {
+          canal,
+          formato,
+          modeloCompra,
+          preco: precoSeguro,
+          precoOriginal: precoSeguro,
+          percentualBudget: Number.isFinite(percentualBudget) ? percentualBudget : 0,
+          valorBudget: Number.isFinite(valorBudget) ? valorBudget : 0,
+          estimativas: calcularEstimativasItem(
+            modeloCompra,
+            Number.isFinite(valorBudget) ? valorBudget : 0,
+            precoSeguro,
+            formato,
+            canal
+          ),
+          regra: {
+            precoMin: precoSeguro * 0.8,
+            precoAlvo: precoSeguro,
+            precoMax: precoSeguro * 1.2,
+            margemMinima: 20,
+          },
+        } satisfies ItemPlanoMidia;
+      });
+
+    setCotacaoId(cotacaoExistente.id);
+    setItemsPlano(itensRestaurados);
+    return itensRestaurados.length > 0;
+  };
+
+  // Gera/recupera a cotação ao montar o componente
   useEffect(() => {
+    if (inicializacaoExecutadaRef.current) {
+      return;
+    }
+    inicializacaoExecutadaRef.current = true;
+
+    const carregouSalvo = carregarItensSalvos();
+    if (carregouSalvo) {
+      setLoading(false);
+      return;
+    }
     gerarCotacao();
   }, []);
 
@@ -333,7 +413,9 @@ export function WizardStep4({
           estimativas: calcularEstimativasItem(
             entrada.modeloCompra,
             valorBudget,
-            preco
+            preco,
+            entrada.formato,
+            entrada.canal
           ),
           regra,
         };
@@ -380,7 +462,9 @@ export function WizardStep4({
           estimativas: calcularEstimativasItem(
             entrada.modeloCompra,
             valorBudget,
-            preco
+            preco,
+            entrada.formato,
+            entrada.canal
           ),
           regra,
         });
@@ -554,7 +638,9 @@ export function WizardStep4({
   const calcularEstimativasItem = (
     modeloCompra: string,
     valorBudget: number,
-    preco: number
+    preco: number,
+    formato?: string,
+    canal?: string
   ) => {
     if (!Number.isFinite(preco) || preco <= 0) {
       return {
@@ -564,21 +650,48 @@ export function WizardStep4({
       };
     }
 
-    const quantidade =
-      modeloCompra === 'CPM'
-        ? Math.round((valorBudget / preco) * 1000)
-        : Math.round(valorBudget / preco);
-
-    if (modeloCompra === 'CPM' || modeloCompra === 'CPV') {
-      return { impressoes: quantidade, cliques: 0, leads: 0 };
+    if (modeloCompra === 'CPM') {
+      const impressoes = Math.round((valorBudget / preco) * 1000);
+      const cliques = Math.round(impressoes * obterCtrPorCanal(canal));
+      return { impressoes, cliques, leads: 0 };
     }
+    if (modeloCompra === 'CPV') {
+      const completeViews = Math.round(valorBudget / preco);
+      const cvr = obterCvrVideo(formato);
+      const impressoes = Math.round(completeViews / cvr);
+      return { impressoes, cliques: 0, leads: 0 };
+    }
+    const quantidade = Math.round(valorBudget / preco);
     if (modeloCompra === 'CPC' || modeloCompra === 'CPE') {
-      return { impressoes: 0, cliques: quantidade, leads: 0 };
+      const ctr = obterCtrPorCanal(canal);
+      const impressoes = ctr > 0 ? Math.round(quantidade / ctr) : 0;
+      return { impressoes, cliques: quantidade, leads: 0 };
     }
     if (modeloCompra === 'CPL' || modeloCompra === 'CPA' || modeloCompra === 'CPI') {
       return { impressoes: 0, cliques: 0, leads: quantidade };
     }
     return { impressoes: 0, cliques: 0, leads: 0 };
+  };
+
+  const obterCvrVideo = (formato?: string): number => {
+    const formatoNormalizado = (formato || '').toLowerCase();
+    if (formatoNormalizado.includes('ctv')) {
+      return VIDEO_CVR_CTV;
+    }
+    if (formatoNormalizado.includes('15')) {
+      return VIDEO_CVR_15S;
+    }
+    if (formatoNormalizado.includes('30')) {
+      return VIDEO_CVR_30S;
+    }
+    return VIDEO_CVR_DEFAULT;
+  };
+
+  const obterCtrPorCanal = (canal?: string): number => {
+    if (canal === 'SOCIAL_PROGRAMATICO') {
+      return CTR_SOCIAL;
+    }
+    return CTR_DISPLAY_CPM;
   };
 
   const handlePriceChange = (index: number, novoPreco: number) => {
@@ -599,7 +712,9 @@ export function WizardStep4({
       novos[index].estimativas = calcularEstimativasItem(
         novos[index].modeloCompra,
         novos[index].valorBudget,
-        novoPreco
+        novoPreco,
+        novos[index].formato,
+        novos[index].canal
       );
       return novos;
     });
@@ -638,7 +753,9 @@ export function WizardStep4({
         estimativas: calcularEstimativasItem(
           item.modeloCompra,
           (dadosPassos.step3.budget * item.percentualBudget) / 100,
-          item.preco
+          item.preco,
+          item.formato,
+          item.canal
         ),
       }))
     );
@@ -664,10 +781,9 @@ export function WizardStep4({
   const calcularEstimativasAtuais = () => {
     return itemsPlano.reduce(
       (acc, item) => {
-        const quantidade = calcularQuantidadeEntrega(item);
-        if (item.modeloCompra === 'CPM') acc.impressoes += quantidade;
-        if (item.modeloCompra === 'CPC') acc.cliques += quantidade;
-        if (item.modeloCompra === 'CPL' || item.modeloCompra === 'CPA') acc.leads += quantidade;
+        acc.impressoes += item.estimativas?.impressoes || 0;
+        acc.cliques += item.estimativas?.cliques || 0;
+        acc.leads += item.estimativas?.leads || 0;
         return acc;
       },
       {
@@ -680,6 +796,19 @@ export function WizardStep4({
 
   const montarStep4Payload = () => {
     const estimativasAtuais = calcularEstimativasAtuais();
+    const cpmEstimado =
+      estimativasAtuais.impressoes > 0
+        ? dadosPassos.step3.budget / (estimativasAtuais.impressoes / 1000)
+        : 0;
+    const cpcEstimado =
+      estimativasAtuais.cliques > 0
+        ? dadosPassos.step3.budget / estimativasAtuais.cliques
+        : 0;
+    const cplEstimado =
+      estimativasAtuais.leads > 0
+        ? dadosPassos.step3.budget / estimativasAtuais.leads
+        : 0;
+
     return {
       mix: itemsPlano.map((item) => ({
         canal: item.canal,
@@ -693,6 +822,9 @@ export function WizardStep4({
       precos: {},
       estimativas: {
         ...estimativasAtuais,
+        cpmEstimado,
+        cpcEstimado,
+        cplEstimado,
       },
     };
   };
@@ -717,9 +849,6 @@ export function WizardStep4({
       },
       body: JSON.stringify({
         cotacaoId,
-        step1: dadosPassos.step1,
-        step2: dadosPassos.step2,
-        step3: dadosPassos.step3,
         step4: montarStep4Payload(),
       }),
     });
@@ -847,6 +976,9 @@ export function WizardStep4({
   };
 
   const estimativasAtuais = calcularEstimativasAtuais();
+  const exibirMetricasLeads = ['LEADS', 'VENDAS'].includes(
+    String(dadosPassos?.step2?.objetivo || '')
+  );
 
   if (loading) {
     return (
@@ -915,6 +1047,7 @@ export function WizardStep4({
                 estimativasAtuais.leads > 0
                   ? dadosPassos.step3.budget / estimativasAtuais.leads
                   : 0,
+              exibirMetricasLeads,
             }}
             budgetTotal={dadosPassos.step3.budget}
           />
@@ -938,6 +1071,7 @@ export function WizardStep4({
           items={itemsPlano}
           budgetTotal={dadosPassos.step3.budget}
           editable={true}
+          exibirMetricasLeads={exibirMetricasLeads}
           onPriceChange={handlePriceChange}
           onBudgetPercentChange={handleBudgetPercentChange}
         />
@@ -967,7 +1101,7 @@ export function WizardStep4({
             disabled={gerandoPDF || !distribuicaoCompleta}
             className="w-full px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
           >
-            {gerandoPDF ? 'Gerando PDF...' : 'Gerar PDF'}
+            {gerandoPDF ? 'Enviando cotação...' : 'Enviar cotação'}
           </button>
         </div>
       </div>

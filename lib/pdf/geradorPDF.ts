@@ -30,6 +30,11 @@ interface DadosCotacao {
   mix: Array<{
     canal: string;
     percentual: number;
+    formato?: string;
+    modeloCompra?: string;
+    valorBudget?: number;
+    precoUnitario?: number;
+    entregaEstimada?: number;
   }>;
   precos: any;
   estimativas: {
@@ -90,6 +95,13 @@ export async function gerarPDF(
   });
 }
 
+function garantirEspaco(doc: PDFKitDocument, espacoNecessario: number) {
+  const limiteInferior = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + espacoNecessario > limiteInferior) {
+    doc.addPage();
+  }
+}
+
 function adicionarCabecalho(doc: PDFKitDocument, dados: DadosCotacao) {
   // Logo (se existir)
   // TODO: Adicionar logo quando disponível
@@ -121,27 +133,27 @@ function adicionarCabecalho(doc: PDFKitDocument, dados: DadosCotacao) {
 
   // Título da proposta
   doc
-    .fontSize(20)
+    .fontSize(18)
     .fillColor(CORES.PRIMARY_DARK)
     .font('Helvetica-Bold')
-    .text('Proposta de Plano de Mídia Digital', 50, 130, { align: 'center' });
+    .text('Proposta de Plano de Mídia Digital', 50, 126, { align: 'center' });
 
   doc
     .fontSize(14)
     .fillColor(CORES.GRAY)
     .font('Helvetica')
-    .text(`Cliente: ${dados.clienteNome}`, 50, 160, { align: 'center' });
+    .text(`Cliente: ${dados.clienteNome}`, 50, 154, { align: 'center' });
 
   doc
     .fontSize(12)
     .text(
       `Período: ${formatarData(dados.dataInicio)} a ${formatarData(dados.dataFim)}`,
       50,
-      180,
+      172,
       { align: 'center' }
     );
 
-  doc.moveDown(2);
+  doc.moveDown(1.2);
 }
 
 function adicionarResumoExecutivo(
@@ -183,6 +195,7 @@ function adicionarResumoExecutivo(
 }
 
 function adicionarPlanoMidia(doc: PDFKitDocument, dados: DadosCotacao) {
+  garantirEspaco(doc, 180);
   doc
     .fontSize(16)
     .fillColor(CORES.PRIMARY_DARK)
@@ -191,133 +204,140 @@ function adicionarPlanoMidia(doc: PDFKitDocument, dados: DadosCotacao) {
 
   doc.moveDown(0.5);
 
-  // Cabeçalho da tabela
+  const exibirLeads = deveExibirMetricasLeads(dados.objetivo);
   const startY = doc.y;
-  const colWidths = [95, 55, 85, 90, 95, 75];
-  const rowHeight = 25;
+  const rowHeight = 30;
+  const colDefs = [
+    { key: 'canal', label: 'Canal', width: 56, align: 'left' as const },
+    { key: 'formato', label: 'Formato', width: 70, align: 'left' as const },
+    { key: 'modelo', label: 'Modelo', width: 34, align: 'left' as const },
+    { key: 'preco', label: 'Preço', width: 36, align: 'right' as const },
+    { key: 'pct', label: '%', width: 24, align: 'right' as const },
+    { key: 'budget', label: 'Budget', width: 46, align: 'right' as const },
+    { key: 'entrega', label: 'Entrega', width: 58, align: 'left' as const },
+    { key: 'imp', label: 'Impr.', width: 38, align: 'right' as const },
+    { key: 'ctr', label: 'CTR', width: 24, align: 'right' as const },
+    { key: 'cvr', label: 'CVR', width: 24, align: 'right' as const },
+    { key: 'cliques', label: 'Cliques', width: 38, align: 'right' as const },
+    ...(exibirLeads ? [{ key: 'leads', label: 'Leads', width: 31, align: 'right' as const }] : []),
+  ];
+  const totalWidth = colDefs.reduce((acc, col) => acc + col.width, 0);
+  const scale = 495 / totalWidth;
+  const columns = colDefs.map((col) => ({ ...col, width: col.width * scale }));
 
-  // Cabeçalho
-  doc
-    .fontSize(10)
-    .fillColor(CORES.PRIMARY)
-    .rect(50, startY, colWidths[0], rowHeight)
-    .fill();
+  let x = 50;
+  doc.fontSize(7).font('Helvetica-Bold').fillColor('#FFFFFF');
+  columns.forEach((col) => {
+    doc.fillColor(CORES.PRIMARY).rect(x, startY, col.width, rowHeight).fill();
+    doc.fillColor('#FFFFFF').text(col.label, x + 2, startY + 8, {
+      width: col.width - 4,
+      align: col.align,
+    });
+    x += col.width;
+  });
 
-  doc
-    .fillColor('#FFFFFF')
-    .font('Helvetica-Bold')
-    .text('Canal', 55, startY + 8);
-
-  doc
-    .fillColor(CORES.PRIMARY)
-    .rect(145, startY, colWidths[1], rowHeight)
-    .fill();
-
-  doc
-    .fillColor('#FFFFFF')
-    .text('%', 150, startY + 8);
-
-  doc
-    .fillColor(CORES.PRIMARY)
-    .rect(200, startY, colWidths[2], rowHeight)
-    .fill();
-
-  doc
-    .fillColor('#FFFFFF')
-    .text('Budget', 205, startY + 8);
-
-  doc
-    .fillColor(CORES.PRIMARY)
-    .rect(285, startY, colWidths[3], rowHeight)
-    .fill();
-
-  doc
-    .fillColor('#FFFFFF')
-    .text('Modelo', 290, startY + 8);
-
-  doc
-    .fillColor(CORES.PRIMARY)
-    .rect(375, startY, colWidths[4], rowHeight)
-    .fill();
-
-  doc
-    .fillColor('#FFFFFF')
-    .text('Preço Unit.', 380, startY + 8);
-
-  doc
-    .fillColor(CORES.PRIMARY)
-    .rect(470, startY, colWidths[5], rowHeight)
-    .fill();
-
-  doc
-    .fillColor('#FFFFFF')
-    .text('Entrega', 475, startY + 8);
-
-  // Linhas da tabela
+  let totaisCliques = 0;
+  let totaisLeads = 0;
+  let totaisImpressoes = 0;
   let currentY = startY + rowHeight;
   dados.mix.forEach((item, index) => {
-    const valorBudget = (dados.budget * item.percentual) / 100;
-    const modeloCompra = obterModeloCompra(item.canal);
-    const precoUnitario = obterPrecoUnitarioCanal(item.canal, dados.precos);
-    const entregaQuantidade = calcularQuantidadeEntrega(modeloCompra, valorBudget, precoUnitario);
+    if (currentY + rowHeight + 30 > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      currentY = doc.page.margins.top + 10;
+    }
+    const valorBudget = Number.isFinite(Number(item.valorBudget))
+      ? Number(item.valorBudget)
+      : (dados.budget * item.percentual) / 100;
+    const modeloCompra = item.modeloCompra || obterModeloCompra(item.canal);
+    const precoUnitario = Number.isFinite(Number(item.precoUnitario))
+      ? Number(item.precoUnitario)
+      : obterPrecoUnitarioCanal(item.canal, dados.precos);
+    const entregaQuantidade = Number.isFinite(Number(item.entregaEstimada))
+      ? Number(item.entregaEstimada)
+      : calcularQuantidadeEntrega(modeloCompra, valorBudget, precoUnitario);
     const entregaDescricao = obterDescricaoEntregaPorModelo(modeloCompra);
+    const impressoes = calcularImpressoesEstimadas(
+      item.canal,
+      item.formato || '',
+      modeloCompra,
+      valorBudget,
+      precoUnitario,
+      entregaQuantidade
+    );
+    const cliques = calcularCliquesEstimados(item.canal, modeloCompra, valorBudget, precoUnitario, impressoes);
+    const leads = calcularLeadsEstimados(modeloCompra, valorBudget, precoUnitario);
+    const ctr = impressoes > 0 && cliques > 0 ? `${((cliques / impressoes) * 100).toFixed(2)}%` : '-';
+    const cvr = obterCvrEstimado(item.canal, item.formato || '', modeloCompra);
 
-    // Alternar cor de fundo
+    totaisImpressoes += impressoes;
+    totaisCliques += cliques;
+    totaisLeads += leads;
+
     if (index % 2 === 0) {
       doc.rect(50, currentY, 495, rowHeight).fillColor(CORES.GRAY_LIGHT).fill();
     }
+    const rowValues: Record<string, string> = {
+      canal: formatarNomeCanal(item.canal),
+      formato: item.formato || '-',
+      modelo: modeloCompra,
+      preco: formatarMoeda(precoUnitario, obterCasasDecimaisPreco(modeloCompra)),
+      pct: `${item.percentual.toFixed(1)}%`,
+      budget: formatarMoeda(valorBudget),
+      entrega: `${formatarNumero(entregaQuantidade)} ${entregaDescricao}`,
+      imp: impressoes > 0 ? formatarNumero(impressoes) : '-',
+      ctr,
+      cvr: cvr != null ? `${cvr}%` : '-',
+      cliques: cliques > 0 ? formatarNumero(cliques) : '-',
+      leads: leads > 0 ? formatarNumero(leads) : '-',
+    };
 
-    doc
-      .fontSize(10)
-      .fillColor(CORES.GRAY)
-      .font('Helvetica')
-      .text(formatarNomeCanal(item.canal), 55, currentY + 8);
-
-    doc.text(`${item.percentual.toFixed(1)}%`, 150, currentY + 8);
-
-    doc.text(formatarMoeda(valorBudget), 205, currentY + 8);
-
-    doc.text(modeloCompra, 290, currentY + 8);
-    doc.text(formatarMoeda(precoUnitario), 380, currentY + 8);
-    doc.fontSize(9).text(
-      `${formatarNumero(entregaQuantidade)} ${entregaDescricao}`,
-      475,
-      currentY + 8,
-      { width: 68 }
-    );
-    doc.fontSize(10);
-
-    // Linha divisória
-    doc
-      .moveTo(50, currentY + rowHeight)
-      .lineTo(545, currentY + rowHeight)
-      .strokeColor('#CCCCCC')
-      .lineWidth(0.5)
-      .stroke();
-
+    x = 50;
+    doc.fontSize(7).fillColor(CORES.GRAY).font('Helvetica');
+    columns.forEach((col) => {
+      doc.text(rowValues[col.key] || '-', x + 2, currentY + 7, {
+        width: col.width - 4,
+        align: col.align,
+      });
+      x += col.width;
+    });
     currentY += rowHeight;
   });
 
-  // Total
-  doc
-    .fontSize(10)
-    .fillColor(CORES.PRIMARY_DARK)
-    .font('Helvetica-Bold')
-    .text('TOTAL', 55, currentY + 8);
+  doc.fontSize(8).fillColor(CORES.PRIMARY_DARK).font('Helvetica-Bold');
+  const totalCtr = totaisImpressoes > 0 ? `${((totaisCliques / totaisImpressoes) * 100).toFixed(2)}%` : '-';
+  const totalValues: Record<string, string> = {
+    canal: 'TOTAIS',
+    formato: '',
+    modelo: '',
+    preco: '',
+    pct: '100.0%',
+    budget: formatarMoeda(dados.budget),
+    entrega: '',
+    imp: totaisImpressoes > 0 ? formatarNumero(totaisImpressoes) : '-',
+    ctr: totalCtr,
+    cvr: '-',
+    cliques: totaisCliques > 0 ? formatarNumero(totaisCliques) : '-',
+    leads: totaisLeads > 0 ? formatarNumero(totaisLeads) : '-',
+  };
+  x = 50;
+  columns.forEach((col) => {
+    doc.text(totalValues[col.key] || '', x + 2, currentY + 8, {
+      width: col.width - 4,
+      align: col.align,
+    });
+    x += col.width;
+  });
 
-  doc.text('100%', 150, currentY + 8);
-
-  doc.text(formatarMoeda(dados.budget), 205, currentY + 8);
-
-  doc.y = currentY + rowHeight + 10;
+  doc.y = currentY + rowHeight + 8;
 }
 
 function adicionarEstimativas(doc: PDFKitDocument, dados: DadosCotacao) {
+  garantirEspaco(doc, 220);
   doc
     .fontSize(16)
     .fillColor(CORES.PRIMARY_DARK)
     .font('Helvetica-Bold')
-    .text('Estimativas de Resultados', 50, doc.y);
+    .text('Estimativas de Resultados do Plano de Mídia Completo', 50, doc.y);
 
   doc.moveDown(0.5);
 
@@ -338,10 +358,20 @@ function adicionarEstimativas(doc: PDFKitDocument, dados: DadosCotacao) {
     ['Métrica', 'Estimativa'],
     ['Impressões', formatarNumero(dados.estimativas.impressoes)],
     ['Cliques', formatarNumero(dados.estimativas.cliques)],
-    ['Leads', formatarNumero(dados.estimativas.leads)],
-    ['CPM Estimado', formatarMoeda(dados.estimativas.cpmEstimado)],
-    ['CPC Estimado', formatarMoeda(dados.estimativas.cpcEstimado)],
-    ['CPL Estimado', formatarMoeda(dados.estimativas.cplEstimado)],
+    ['eCPM', formatarMoeda(dados.estimativas.cpmEstimado)],
+    ['eCPC', formatarMoeda(dados.estimativas.cpcEstimado)],
+    [
+      'Taxa de Clique (eCTR)',
+      dados.estimativas.impressoes > 0
+        ? `${((dados.estimativas.cliques / dados.estimativas.impressoes) * 100).toFixed(2)}%`
+        : '0.00%',
+    ],
+    ...(deveExibirMetricasLeads(dados.objetivo)
+      ? [
+          ['Leads', formatarNumero(dados.estimativas.leads)],
+          ['CPL', formatarMoeda(dados.estimativas.cplEstimado)],
+        ]
+      : []),
   ];
 
   const startY = doc.y;
@@ -390,68 +420,47 @@ function adicionarEstimativas(doc: PDFKitDocument, dados: DadosCotacao) {
     }
   });
 
-  doc.y = startY + estimativas.length * rowHeight + 10;
+  doc.y = startY + estimativas.length * rowHeight + 12;
+}
+
+function deveExibirMetricasLeads(objetivo: string): boolean {
+  return objetivo === 'LEADS' || objetivo === 'VENDAS';
 }
 
 function adicionarRodape(doc: PDFKitDocument, dados: DadosCotacao) {
-  const pageHeight = doc.page.height;
-  const footerY = pageHeight - 100;
-
-  doc
-    .fontSize(10)
-    .fillColor(CORES.GRAY)
-    .font('Helvetica')
-    .text('Próximos Passos:', 50, footerY);
-
-  doc.moveDown(0.3);
-
-  doc
-    .fontSize(9)
-    .text('1. Aprovação da proposta pelo cliente', 50, doc.y, { indent: 20 });
-
-  doc.text('2. Envio de materiais criativos', 50, doc.y, { indent: 20 });
-
-  doc.text('3. Início da veiculação conforme cronograma', 50, doc.y, {
-    indent: 20,
-  });
-
-  doc.moveDown(0.5);
-
+  garantirEspaco(doc, 72);
   doc
     .fontSize(10)
     .fillColor(CORES.PRIMARY_DARK)
     .font('Helvetica-Bold')
-    .text('Contato:', 50, doc.y);
-
+    .text('Contato comercial', 50, doc.y);
   doc
     .fontSize(9)
     .fillColor(CORES.GRAY)
     .font('Helvetica')
-    .text(`Vendedor: ${dados.vendedor.nome}`, 50, doc.y, { indent: 20 });
-
-  doc.text(`E-mail: ${dados.vendedor.email}`, 50, doc.y, { indent: 20 });
-
-  doc.moveDown(0.5);
-
+    .text(`Vendedor: ${dados.vendedor.nome}`, 50, doc.y + 2);
+  doc.text(`E-mail: ${dados.vendedor.email}`, 50, doc.y + 1);
+  doc.moveDown(0.4);
   doc
     .fontSize(8)
     .fillColor(CORES.GRAY)
-    .text(
-      `Documento gerado em ${formatarData(new Date())} - Weach Pricing & Media Recommender`,
-      50,
-      pageHeight - 30,
-      { align: 'center' }
-    );
+    .text(`Documento gerado em ${formatarData(new Date())} - Weach Pricing & Media Recommender`, {
+      align: 'center',
+    });
 }
 
 // Funções auxiliares
-function formatarMoeda(valor: number): string {
+function formatarMoeda(valor: number, casasDecimais = 2): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: casasDecimais,
+    maximumFractionDigits: casasDecimais,
   }).format(valor);
+}
+
+function obterCasasDecimaisPreco(modeloCompra: string): number {
+  return modeloCompra === 'CPV' ? 3 : 2;
 }
 
 function formatarNumero(valor: number): string {
@@ -558,5 +567,67 @@ function calcularQuantidadeEntrega(
     return Math.round((valorBudget / precoUnitario) * 1000);
   }
   return Math.round(valorBudget / precoUnitario);
+}
+
+function calcularCliquesEstimados(
+  canal: string,
+  modeloCompra: string,
+  valorBudget: number,
+  precoUnitario: number,
+  impressoes: number
+): number {
+  if (!Number.isFinite(precoUnitario) || precoUnitario <= 0) return 0;
+  if (modeloCompra === 'CPC' || modeloCompra === 'CPE') {
+    return Math.round(valorBudget / precoUnitario);
+  }
+  if (modeloCompra === 'CPM') {
+    const ctr = canal === 'SOCIAL_PROGRAMATICO' ? 0.02 : 0.004;
+    return Math.round(impressoes * ctr);
+  }
+  return 0;
+}
+
+function calcularLeadsEstimados(
+  modeloCompra: string,
+  valorBudget: number,
+  precoUnitario: number
+): number {
+  if (!Number.isFinite(precoUnitario) || precoUnitario <= 0) return 0;
+  if (modeloCompra === 'CPL' || modeloCompra === 'CPA' || modeloCompra === 'CPI') {
+    return Math.round(valorBudget / precoUnitario);
+  }
+  return 0;
+}
+
+function calcularImpressoesEstimadas(
+  canal: string,
+  formato: string,
+  modeloCompra: string,
+  valorBudget: number,
+  precoUnitario: number,
+  entregaEstimada: number
+): number {
+  if (!Number.isFinite(precoUnitario) || precoUnitario <= 0) return 0;
+  if (modeloCompra === 'CPM') {
+    return Math.round((valorBudget / precoUnitario) * 1000);
+  }
+  if (modeloCompra === 'CPC' || modeloCompra === 'CPE') {
+    const ctr = canal === 'SOCIAL_PROGRAMATICO' ? 0.02 : 0.004;
+    return ctr > 0 ? Math.round(entregaEstimada / ctr) : 0;
+  }
+  if (modeloCompra === 'CPV') {
+    const cvr = obterCvrEstimado(canal, formato, modeloCompra);
+    if (!cvr) return 0;
+    return Math.round(entregaEstimada / (cvr / 100));
+  }
+  return 0;
+}
+
+function obterCvrEstimado(canal: string, formato: string, modeloCompra: string): number | null {
+  if (modeloCompra !== 'CPV') return null;
+  if (canal === 'CTV' || formato.toLowerCase().includes('ctv')) return 95;
+  if (formato.includes('15')) return 80;
+  if (formato.includes('30')) return 75;
+  return 75;
 }
 

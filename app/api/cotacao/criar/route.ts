@@ -26,6 +26,11 @@ const CANAIS_VALIDOS = [
 
 type CanalValido = (typeof CANAIS_VALIDOS)[number];
 
+interface ValidacaoRapida {
+  avisos: Array<{ tipo: 'erro' | 'aviso' | 'sugestao'; mensagem: string; campo?: string; severidade: 'baixa' | 'media' | 'alta' }>;
+  valido: boolean;
+}
+
 function normalizarCanalResposta(canal: string): CanalValido | null {
   const normalized = canal.trim().toUpperCase().replace(/\s+/g, '_');
   return (CANAIS_VALIDOS as readonly string[]).includes(normalized)
@@ -114,6 +119,7 @@ const schemaCriarCotacao = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const startMs = Date.now();
     const userId = obterUserIdDoRequest(request.headers);
     if (!userId) {
       return NextResponse.json(
@@ -136,40 +142,41 @@ export async function POST(request: NextRequest) {
         ? dados.canaisSelecionados
         : inventariosDisponiveisPadrao;
 
-    const mixResultado = await gerarMixMidia({
-      segmento: dados.clienteSegmento,
-      objetivo: dados.objetivo,
-      budgetTotal: dados.budget,
-      regiao: dados.regiao,
-      maturidadeDigital: dados.maturidadeDigital,
-      toleranciaRisco: dados.risco,
-      inventariosDisponiveis: inventariosDisponiveis.map(i => i.toLowerCase()),
-    });
-    const mixNormalizado = filtrarERenormalizarMix(
-      mixResultado.mix || [],
-      inventariosDisponiveis as CanalValido[]
-    );
-
     const permitidosSet = new Set(inventariosDisponiveis);
     const formatosDoWizard = (dados.formatosSelecionados || []).filter((f) =>
       permitidosSet.has(f.canal)
     );
 
-    const distribuicaoFormatos = await gerarDistribuicaoBudgetPorFormato({
-      segmento: dados.clienteSegmento,
-      objetivo: dados.objetivo,
-      budgetTotal: dados.budget,
-      formatos: formatosDoWizard,
-    });
+    // 1-2. Executa etapas principais em paralelo (reduz latência da etapa 4)
+    const [mixResultado, distribuicaoFormatos, precosCalculados] = await Promise.all([
+      gerarMixMidia({
+        segmento: dados.clienteSegmento,
+        objetivo: dados.objetivo,
+        budgetTotal: dados.budget,
+        regiao: dados.regiao,
+        maturidadeDigital: dados.maturidadeDigital,
+        toleranciaRisco: dados.risco,
+        inventariosDisponiveis: inventariosDisponiveis.map(i => i.toLowerCase()),
+      }),
+      gerarDistribuicaoBudgetPorFormato({
+        segmento: dados.clienteSegmento,
+        objetivo: dados.objetivo,
+        budgetTotal: dados.budget,
+        formatos: formatosDoWizard,
+      }),
+      calcularPrecosCotacao({
+        cpmBase,
+        segmento: dados.clienteSegmento,
+        regiao: dados.regiao,
+        budget: dados.budget,
+        objetivo: dados.objetivo,
+      }),
+    ]);
 
-    // 2. Calcula preços usando motor determinístico
-    const precosCalculados = await calcularPrecosCotacao({
-      cpmBase,
-      segmento: dados.clienteSegmento,
-      regiao: dados.regiao,
-      budget: dados.budget,
-      objetivo: dados.objetivo,
-    });
+    const mixNormalizado = filtrarERenormalizarMix(
+      mixResultado.mix || [],
+      inventariosDisponiveis as CanalValido[]
+    );
 
     // 3. Calcula estimativas básicas
     const estimativas = calcularEstimativas(
@@ -178,26 +185,14 @@ export async function POST(request: NextRequest) {
       precosCalculados
     );
 
-    // 4. Valida plano de mídia
-    const validacao = await validarPlanoMidia({
-      objetivo: dados.objetivo,
-      segmento: dados.clienteSegmento,
-      regiao: dados.regiao,
-      budget: dados.budget,
-      mix: mixNormalizado,
-      estimativas,
-    });
-
-    // 5. Gera explicação comercial
-    const explicacaoComercial = await gerarExplicacaoComercial({
-      clienteNome: dados.clienteNome,
-      segmento: dados.clienteSegmento,
-      objetivo: dados.objetivo,
-      regiao: dados.regiao,
-      mix: mixNormalizado,
-      modelosCompra: {},
-      estimativas,
-    });
+    // 4-5. Resposta imediata com fallback rápido; enriquecimento IA roda em background
+    const validacao = gerarValidacaoRapida(mixNormalizado);
+    const explicacaoComercial = gerarExplicacaoComercialFallback(
+      dados.clienteNome,
+      dados.clienteSegmento,
+      dados.objetivo,
+      dados.regiao
+    );
 
     // 6. Salva no banco
     const cotacao = await prisma.wp_Cotacao.create({
@@ -231,7 +226,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 7. Salva histórico de IA - Plano de Mídia
+    // 7. Salva histórico de IA - Plano de Mídia (rápido)
     await prisma.wp_HistoricoIA.create({
       data: {
         cotacaoId: cotacao.id,
@@ -250,24 +245,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 8. Salva histórico de validação (se houver avisos)
-    if (validacao.avisos.length > 0) {
-      await prisma.wp_HistoricoIA.create({
-        data: {
-          cotacaoId: cotacao.id,
-          tipo: 'VALIDACAO',
-          promptEnviado: JSON.stringify({
-            objetivo: dados.objetivo,
-            segmento: dados.clienteSegmento,
-            regiao: dados.regiao,
-            budget: dados.budget,
-            mix: mixNormalizado,
-          }),
-          respostaIa: JSON.stringify(validacao),
-          modeloUsado: 'gpt-4o-mini',
-        },
-      });
-    }
+    // 8. Enriquecimento com IA (não bloqueante para UX do usuário)
+    executarEnriquecimentoAssincrono({
+      cotacaoId: cotacao.id,
+      dados,
+      mixNormalizado,
+      estimativas,
+    });
+
+    console.info('[cotacao/criar][timing_ms]', Date.now() - startMs);
 
     return NextResponse.json({
       success: true,
@@ -296,6 +282,129 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function gerarValidacaoRapida(mix: Array<{ canal: string; percentual: number }>): ValidacaoRapida {
+  const somaPercentuais = mix.reduce((acc, item) => acc + item.percentual, 0);
+  const avisos: ValidacaoRapida['avisos'] = [];
+  if (Math.abs(somaPercentuais - 100) > 0.01) {
+    avisos.push({
+      tipo: 'aviso',
+      mensagem: `Soma do mix em ${somaPercentuais.toFixed(2)}%; o sistema ajustou automaticamente para 100%.`,
+      campo: 'mix',
+      severidade: 'baixa',
+    });
+  }
+  return { avisos, valido: true };
+}
+
+function gerarExplicacaoComercialFallback(
+  clienteNome: string,
+  segmento: string,
+  objetivo: string,
+  regiao: string
+): string {
+  return `Plano desenvolvido para ${clienteNome} (${segmento}), com foco em ${objetivo} e execução em ${regiao}. A recomendação prioriza distribuição equilibrada de investimento por formato e canal, mantendo flexibilidade para otimizações durante a campanha.`;
+}
+
+function executarEnriquecimentoAssincrono(params: {
+  cotacaoId: string;
+  dados: z.infer<typeof schemaCriarCotacao>;
+  mixNormalizado: Array<{ canal: string; percentual: number }>;
+  estimativas: {
+    impressoes: number;
+    cliques: number;
+    leads: number;
+    cpmEstimado: number;
+    cpcEstimado: number;
+    cplEstimado: number;
+  };
+}) {
+  void (async () => {
+    try {
+      const [validacaoIa, explicacaoIa] = await Promise.all([
+        withTimeout(
+          validarPlanoMidia({
+            objetivo: params.dados.objetivo,
+            segmento: params.dados.clienteSegmento,
+            regiao: params.dados.regiao,
+            budget: params.dados.budget,
+            mix: params.mixNormalizado,
+            estimativas: params.estimativas,
+          }),
+          2500
+        ),
+        withTimeout(
+          gerarExplicacaoComercial({
+            clienteNome: params.dados.clienteNome,
+            segmento: params.dados.clienteSegmento,
+            objetivo: params.dados.objetivo,
+            regiao: params.dados.regiao,
+            mix: params.mixNormalizado,
+            modelosCompra: {},
+            estimativas: params.estimativas,
+          }),
+          2500
+        ),
+      ]);
+
+      const writes: Array<Promise<unknown>> = [];
+      if (validacaoIa && validacaoIa.avisos.length > 0) {
+        writes.push(
+          prisma.wp_HistoricoIA.create({
+            data: {
+              cotacaoId: params.cotacaoId,
+              tipo: 'VALIDACAO',
+              promptEnviado: JSON.stringify({
+                objetivo: params.dados.objetivo,
+                segmento: params.dados.clienteSegmento,
+                regiao: params.dados.regiao,
+                budget: params.dados.budget,
+                mix: params.mixNormalizado,
+              }),
+              respostaIa: JSON.stringify(validacaoIa),
+              modeloUsado: 'gpt-4o-mini',
+            },
+          })
+        );
+      }
+      if (typeof explicacaoIa === 'string' && explicacaoIa.trim().length > 0) {
+        writes.push(
+          prisma.wp_HistoricoIA.create({
+            data: {
+              cotacaoId: params.cotacaoId,
+              tipo: 'EXPLICACAO',
+              promptEnviado: JSON.stringify({
+                clienteNome: params.dados.clienteNome,
+                segmento: params.dados.clienteSegmento,
+                objetivo: params.dados.objetivo,
+                regiao: params.dados.regiao,
+              }),
+              respostaIa: explicacaoIa,
+              modeloUsado: 'gpt-4o-mini',
+            },
+          })
+        );
+      }
+      if (writes.length > 0) {
+        await Promise.allSettled(writes);
+      }
+    } catch (error) {
+      console.warn('[cotacao/criar][enriquecimento-assincrono-erro]', error);
+    }
+  })();
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<null>((resolve) => {
+    timeoutHandle = setTimeout(() => resolve(null), timeoutMs);
+  });
+  const result = await Promise.race([promise, timeoutPromise]);
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+  }
+  return result;
 }
 
 /**

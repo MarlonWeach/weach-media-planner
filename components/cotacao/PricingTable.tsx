@@ -54,6 +54,7 @@ interface PricingTableProps {
   items: ItemPlanoMidia[];
   budgetTotal: number;
   editable?: boolean;
+  exibirMetricasLeads?: boolean;
   onPriceChange?: (index: number, novoPreco: number) => { ok: boolean; message?: string };
   onBudgetPercentChange?: (index: number, novoPercentual: number) => { ok: boolean; message?: string };
 }
@@ -62,19 +63,26 @@ export function PricingTable({
   items,
   budgetTotal,
   editable = false,
+  exibirMetricasLeads = false,
   onPriceChange,
   onBudgetPercentChange,
 }: PricingTableProps) {
   const [mensagemAjuste, setMensagemAjuste] = useState<string | null>(null);
   // Formatação de moeda
-  const formatarMoeda = (valor: number) => {
+  const formatarMoeda = (valor: number, casasDecimais = 2) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: casasDecimais,
+      maximumFractionDigits: casasDecimais,
     }).format(valor);
   };
+
+  const obterCasasDecimaisPreco = (item: ItemPlanoMidia) =>
+    item.modeloCompra === 'CPV' ? 3 : 2;
+
+  const obterStepPreco = (item: ItemPlanoMidia) =>
+    item.modeloCompra === 'CPV' ? '0.001' : '0.01';
 
   // Formatação de número
   const formatarNumero = (valor: number) => {
@@ -87,6 +95,28 @@ export function PricingTable({
   // Formatação de percentual
   const formatarPercentual = (valor: number) => {
     return `${valor.toFixed(2)}%`;
+  };
+
+  const obterImpressesEstimadas = (item: ItemPlanoMidia) =>
+    item.estimativas?.impressoes || 0;
+
+  const obterCliquesEstimados = (item: ItemPlanoMidia) =>
+    item.estimativas?.cliques || 0;
+
+  const obterCvrEstimado = (item: ItemPlanoMidia) => {
+    if (item.modeloCompra !== 'CPV') return null;
+    const formatoNormalizado = (item.formato || '').toLowerCase();
+    if (formatoNormalizado.includes('ctv')) return 95;
+    if (formatoNormalizado.includes('15')) return 80;
+    if (formatoNormalizado.includes('30')) return 75;
+    return 75;
+  };
+
+  const obterCtrEstimado = (item: ItemPlanoMidia) => {
+    const impressoes = obterImpressesEstimadas(item);
+    const cliques = obterCliquesEstimados(item);
+    if (impressoes <= 0 || cliques <= 0) return null;
+    return (cliques / impressoes) * 100;
   };
 
   // Cálculo de totais
@@ -165,7 +195,7 @@ export function PricingTable({
                   <input
                     key={`preco-mobile-${index}-${item.preco}`}
                     type="number"
-                    step="0.01"
+                    step={obterStepPreco(item)}
                     min="0"
                     defaultValue={item.preco}
                     onBlur={(e) => {
@@ -177,7 +207,9 @@ export function PricingTable({
                     className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-right text-sm"
                   />
                 ) : (
-                  <p className="font-medium text-gray-900">{formatarMoeda(item.preco)}</p>
+                  <p className="font-medium text-gray-900">
+                    {formatarMoeda(item.preco, obterCasasDecimaisPreco(item))}
+                  </p>
                 )}
               </div>
 
@@ -187,7 +219,7 @@ export function PricingTable({
                   <input
                     key={`percentual-mobile-${index}-${item.percentualBudget}`}
                     type="number"
-                    step="0.01"
+                    step={obterStepPreco(item)}
                     min="0"
                     max="100"
                     defaultValue={item.percentualBudget}
@@ -211,13 +243,31 @@ export function PricingTable({
                   {obterDescricaoEntregaPorModelo(item.modeloCompra)}
                 </p>
               </div>
+              <div>
+                <p className="text-xs text-gray-500">Impressões Est.</p>
+                <p className="font-medium text-gray-900">{formatarNumero(obterImpressesEstimadas(item))}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">CTR Est.</p>
+                <p className="font-medium text-gray-900">
+                  {obterCtrEstimado(item) != null ? `${obterCtrEstimado(item)!.toFixed(2)}%` : '-'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">CVR Est.</p>
+                <p className="font-medium text-gray-900">
+                  {obterCvrEstimado(item) != null
+                    ? `${obterCvrEstimado(item)}%`
+                    : '-'}
+                </p>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="hidden w-full overflow-x-hidden lg:block">
-      <table className="w-full table-fixed divide-y divide-gray-200">
+      <div className="hidden w-full overflow-x-auto lg:block">
+      <table className="min-w-[1100px] w-full table-auto divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
             <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -242,32 +292,43 @@ export function PricingTable({
               Entrega Estimada
             </th>
             <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Cliques
+              Impressões
             </th>
             <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Leads
+              CTR
             </th>
+            <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              CVR
+            </th>
+            <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Cliques
+            </th>
+            {exibirMetricasLeads && (
+              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Leads
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {items.map((item, index) => (
             <tr key={index} className="hover:bg-gray-50">
-              <td className="px-3 py-4 align-top">
+              <td className="px-3 py-4 align-top min-w-[130px]">
                 <div className="text-sm font-medium text-gray-900">
                   {formatarNomeCanal(item.canal)}
                 </div>
               </td>
-              <td className="px-3 py-4 align-top">
+              <td className="px-3 py-4 align-top min-w-[180px]">
                 <div className="text-sm text-gray-500 break-words">
                   {item.formato || '-'}
                 </div>
               </td>
-              <td className="px-3 py-4 align-top">
-                <div className="text-sm text-gray-500">
+              <td className="px-3 py-4 align-top min-w-[70px]">
+                <div className="text-sm text-gray-500 whitespace-nowrap">
                   {item.modeloCompra}
                 </div>
               </td>
-              <td className="px-3 py-4 text-right align-top">
+              <td className="px-3 py-4 text-right align-top min-w-[95px]">
                 {editable ? (
                   <input
                     key={`preco-${index}-${item.preco}`}
@@ -281,15 +342,15 @@ export function PricingTable({
                         e.target.value = String(item.preco);
                       }
                     }}
-                    className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary focus:border-transparent text-right"
+                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary focus:border-transparent text-right"
                   />
                 ) : (
-                  <div className="text-sm font-medium text-gray-900">
-                    {formatarMoeda(item.preco)}
+                  <div className="text-sm font-medium text-gray-900 whitespace-nowrap">
+                    {formatarMoeda(item.preco, obterCasasDecimaisPreco(item))}
                   </div>
                 )}
               </td>
-              <td className="px-3 py-4 text-right align-top">
+              <td className="px-3 py-4 text-right align-top min-w-[80px]">
                 {editable ? (
                   <input
                     key={`percentual-${index}-${item.percentualBudget}`}
@@ -299,41 +360,64 @@ export function PricingTable({
                     max="100"
                     defaultValue={item.percentualBudget}
                     onBlur={(e) => handleBudgetPercentChange(index, e.target.value)}
-                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary focus:border-transparent text-right"
+                    className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary focus:border-transparent text-right"
                   />
                 ) : (
-                  <div className="text-sm text-gray-900">
+                  <div className="text-sm text-gray-900 whitespace-nowrap">
                     {formatarPercentual(item.percentualBudget)}
                   </div>
                 )}
               </td>
-              <td className="px-3 py-4 text-right align-top">
-                <div className="text-sm font-medium text-gray-900">
+              <td className="px-3 py-4 text-right align-top min-w-[120px]">
+                <div className="text-sm font-medium text-gray-900 whitespace-nowrap">
                   {formatarMoeda(item.valorBudget)}
                 </div>
               </td>
-              <td className="px-3 py-4 text-right align-top">
-                <div className="text-sm text-gray-500 break-words">
+              <td className="px-3 py-4 text-right align-top min-w-[140px]">
+                <div className="text-sm text-gray-500">
                   {formatarNumero(
                     calcularQuantidadeEntrega(item.modeloCompra, item.valorBudget, item.preco)
                   )}{' '}
                   {obterDescricaoEntregaPorModelo(item.modeloCompra)}
                 </div>
               </td>
-              <td className="px-3 py-4 text-right align-top">
-                <div className="text-sm text-gray-500">
+              <td className="px-3 py-4 text-right align-top min-w-[100px]">
+                <div className="text-sm text-gray-500 whitespace-nowrap">
+                  {obterImpressesEstimadas(item)
+                    ? formatarNumero(obterImpressesEstimadas(item))
+                    : '-'}
+                </div>
+              </td>
+              <td className="px-3 py-4 text-right align-top min-w-[70px]">
+                <div className="text-sm text-gray-500 whitespace-nowrap">
+                  {obterCtrEstimado(item) != null
+                    ? `${obterCtrEstimado(item)!.toFixed(2)}%`
+                    : '-'}
+                </div>
+              </td>
+              <td className="px-3 py-4 text-right align-top min-w-[70px]">
+                <div className="text-sm text-gray-500 whitespace-nowrap">
+                  {obterCvrEstimado(item) != null
+                    ? `${obterCvrEstimado(item)}%`
+                    : '-'}
+                </div>
+              </td>
+              <td className="px-3 py-4 text-right align-top min-w-[90px]">
+                <div className="text-sm text-gray-500 whitespace-nowrap">
                   {item.estimativas?.cliques
                     ? formatarNumero(item.estimativas.cliques)
                     : '-'}
                 </div>
               </td>
-              <td className="px-3 py-4 text-right align-top">
-                <div className="text-sm text-gray-500">
-                  {item.estimativas?.leads
-                    ? formatarNumero(item.estimativas.leads)
-                    : '-'}
-                </div>
-              </td>
+              {exibirMetricasLeads && (
+                <td className="px-3 py-4 text-right align-top min-w-[90px]">
+                  <div className="text-sm text-gray-500 whitespace-nowrap">
+                    {item.estimativas?.leads
+                      ? formatarNumero(item.estimativas.leads)
+                      : '-'}
+                  </div>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -362,14 +446,33 @@ export function PricingTable({
             </td>
             <td className="px-3 py-4 whitespace-nowrap text-right">
               <div className="text-sm font-bold">
-                {formatarNumero(totais.cliques)}
+                {formatarNumero(totais.impressoes)}
               </div>
             </td>
             <td className="px-3 py-4 whitespace-nowrap text-right">
               <div className="text-sm font-bold">
-                {formatarNumero(totais.leads)}
+                {totais.impressoes > 0
+                  ? `${((totais.cliques / totais.impressoes) * 100).toFixed(2)}%`
+                  : '-'}
               </div>
             </td>
+            <td className="px-3 py-4 whitespace-nowrap text-right">
+              <div className="text-sm font-bold">
+                -
+              </div>
+            </td>
+            <td className="px-3 py-4 whitespace-nowrap text-right">
+              <div className="text-sm font-bold">
+                {formatarNumero(totais.cliques)}
+              </div>
+            </td>
+            {exibirMetricasLeads && (
+              <td className="px-3 py-4 whitespace-nowrap text-right">
+                <div className="text-sm font-bold">
+                  {formatarNumero(totais.leads)}
+                </div>
+              </td>
+            )}
           </tr>
         </tfoot>
       </table>

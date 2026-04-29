@@ -16,6 +16,18 @@ import fs from 'fs';
 
 type DefinicaoCampanha = 'PERFORMANCE' | 'PROGRAMATICA' | 'WHATSAPP_SMS_PUSH';
 
+interface ObservacaoPayload {
+  solicitacao?: {
+    solicitante?: string;
+    solicitanteEmail?: string;
+    agencia?: string;
+    cotacaoProativa?: boolean;
+  };
+  estrategia?: {
+    definicaoCampanha?: string[];
+  };
+}
+
 function extrairDefinicaoCampanhaDaObservacao(observacoes: string | null): DefinicaoCampanha[] {
   if (!observacoes) return [];
   try {
@@ -30,6 +42,50 @@ function extrairDefinicaoCampanhaDaObservacao(observacoes: string | null): Defin
   } catch {
     return [];
   }
+}
+
+function extrairPayloadObservacoes(observacoes: string | null): ObservacaoPayload | null {
+  if (!observacoes) return null;
+  try {
+    const parsed = JSON.parse(observacoes) as ObservacaoPayload;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function inferirDefinicaoCampanhaPeloMix(mixSugerido: unknown): DefinicaoCampanha[] {
+  const rows: Array<{ canal?: string }> = Array.isArray(mixSugerido)
+    ? (mixSugerido as Array<{ canal?: string }>)
+    : Array.isArray((mixSugerido as { mix?: Array<{ canal?: string }> } | null)?.mix)
+      ? ((mixSugerido as { mix?: Array<{ canal?: string }> }).mix as Array<{ canal?: string }>)
+      : [];
+
+  const canais = new Set(
+    rows
+      .map((row) => (typeof row?.canal === 'string' ? row.canal.toUpperCase() : ''))
+      .filter(Boolean)
+  );
+
+  const result = new Set<DefinicaoCampanha>();
+  if (canais.has('CPL_CPI')) {
+    result.add('PERFORMANCE');
+  }
+  if (
+    canais.has('DISPLAY_PROGRAMATICO') ||
+    canais.has('VIDEO_PROGRAMATICO') ||
+    canais.has('CTV') ||
+    canais.has('AUDIO_DIGITAL') ||
+    canais.has('SOCIAL_PROGRAMATICO') ||
+    canais.has('IN_LIVE')
+  ) {
+    result.add('PROGRAMATICA');
+  }
+  if (canais.has('CRM_MEDIA')) {
+    result.add('WHATSAPP_SMS_PUSH');
+  }
+
+  return Array.from(result);
 }
 
 export async function POST(
@@ -81,7 +137,26 @@ export async function POST(
     // Prepara dados para o PDF
     const mix = cotacao.mixSugerido as any;
     const precos = cotacao.precosSugeridos as any;
-    const estimativas = cotacao.estimativas as any;
+    const estimativasRaw = cotacao.estimativas as any;
+    const mixRows = Array.isArray(mix) ? mix : mix?.mix || [];
+    const estimativas = {
+      impressoes: Number(estimativasRaw?.impressoes || 0),
+      cliques: Number(estimativasRaw?.cliques || 0),
+      leads: Number(estimativasRaw?.leads || 0),
+      cpmEstimado: Number(estimativasRaw?.cpmEstimado || 0),
+      cpcEstimado: Number(estimativasRaw?.cpcEstimado || 0),
+      cplEstimado: Number(estimativasRaw?.cplEstimado || 0),
+    };
+    if (estimativas.cpmEstimado <= 0 && estimativas.impressoes > 0) {
+      estimativas.cpmEstimado = Number(cotacao.budget) / (estimativas.impressoes / 1000);
+    }
+    if (estimativas.cpcEstimado <= 0 && estimativas.cliques > 0) {
+      estimativas.cpcEstimado = Number(cotacao.budget) / estimativas.cliques;
+    }
+    if (estimativas.cplEstimado <= 0 && estimativas.leads > 0) {
+      estimativas.cplEstimado = Number(cotacao.budget) / estimativas.leads;
+    }
+    const payloadObs = extrairPayloadObservacoes(cotacao.observacoes);
 
     const dadosPDF = {
       id: cotacao.id,
@@ -93,16 +168,9 @@ export async function POST(
       dataFim: cotacao.dataFim,
       regiao: cotacao.regiao,
       explicacaoComercial: '', // Será preenchido se existir no histórico IA
-      mix: mix?.mix || [],
+      mix: mixRows,
       precos,
-      estimativas: estimativas || {
-        impressoes: 0,
-        cliques: 0,
-        leads: 0,
-        cpmEstimado: 0,
-        cpcEstimado: 0,
-        cplEstimado: 0,
-      },
+      estimativas,
       vendedor: {
         nome: cotacao.vendedor.nome,
         email: cotacao.vendedor.email,
@@ -147,7 +215,18 @@ export async function POST(
 
     // Dispara e-mail operacional quando a cotação é efetivamente enviada para análise
     // (na geração do PDF), evitando disparo no momento de criação de rascunho.
-    const definicaoCampanha = extrairDefinicaoCampanhaDaObservacao(cotacao.observacoes);
+    const definicaoDaObservacao = extrairDefinicaoCampanhaDaObservacao(cotacao.observacoes);
+    const definicaoCampanha =
+      definicaoDaObservacao.length > 0
+        ? definicaoDaObservacao
+        : inferirDefinicaoCampanhaPeloMix(cotacao.mixSugerido);
+
+    if (definicaoDaObservacao.length === 0) {
+      console.warn(
+        '[CotacaoEmail][fallback-definicao]',
+        JSON.stringify({ cotacaoId, source: 'mixSugerido', definicaoCampanha })
+      );
+    }
     const recipients = resolveCotacaoEmailRecipients({
       definicaoCampanha,
       solicitanteEmail: cotacao.solicitanteEmail || undefined,
@@ -175,10 +254,20 @@ export async function POST(
             budget: Number(cotacao.budget),
             regiao: cotacao.regiao,
             definicaoCampanha,
-            solicitanteNome: cotacao.solicitanteNome || undefined,
-            solicitanteEmail: cotacao.solicitanteEmail || undefined,
-            agenciaNome: cotacao.agenciaNome || undefined,
+            solicitanteNome:
+              cotacao.solicitanteNome || payloadObs?.solicitacao?.solicitante || undefined,
+            solicitanteEmail:
+              cotacao.solicitanteEmail ||
+              payloadObs?.solicitacao?.solicitanteEmail ||
+              undefined,
+            agenciaNome: cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || undefined,
+            cotacaoProativa: Boolean(payloadObs?.solicitacao?.cotacaoProativa),
             observacoes: cotacao.observacoes || undefined,
+            mix: mixRows,
+            precos,
+            estimativas,
+            attachmentPath: pdfPath,
+            attachmentFilename: pdfFileName,
           },
           {
             to: recipients.to,
@@ -208,6 +297,16 @@ export async function POST(
           );
         }
       }
+    } else if (!recipients.shouldSend) {
+      console.warn(
+        '[CotacaoEmail][skip]',
+        JSON.stringify({ cotacaoId, motivo: 'regra', definicaoCampanha, status: cotacao.status })
+      );
+    } else if (cotacao.status === 'ENVIADA') {
+      console.warn(
+        '[CotacaoEmail][skip]',
+        JSON.stringify({ cotacaoId, motivo: 'status-ja-enviada', definicaoCampanha })
+      );
     }
 
     return NextResponse.json({

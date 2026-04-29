@@ -28,6 +28,19 @@ export default function EditarCotacaoPage({
     step2: null as Step2Data | null,
     step3: null as Step3Data | null,
   });
+  const [cotacaoExistente, setCotacaoExistente] = useState<{
+    id: string;
+    mix?: Array<{
+      canal?: string;
+      formato?: string;
+      modeloCompra?: string;
+      percentual?: number;
+      valorBudget?: number;
+      precoUnitario?: number;
+      preco?: number;
+      entregaEstimada?: number;
+    }>;
+  } | null>(null);
 
   useEffect(() => {
     carregarCotacao();
@@ -38,9 +51,14 @@ export default function EditarCotacaoPage({
     setError(null);
 
     try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+
       const response = await fetch(`/api/cotacao/${params.id}`, {
         headers: {
-          'x-user-id': '00000000-0000-0000-0000-000000000000', // TODO: Obter do contexto
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -50,6 +68,8 @@ export default function EditarCotacaoPage({
 
       const data = await response.json();
       const cotacao = data.cotacao;
+      const observacoesPayload = extrairPayloadObservacoes(cotacao.observacoes);
+      const estrategia = observacoesPayload?.estrategia;
 
       // Determina em qual passo está baseado nos dados preenchidos
       if (cotacao.mixSugerido && Object.keys(cotacao.mixSugerido).length > 0) {
@@ -90,7 +110,23 @@ export default function EditarCotacaoPage({
         },
         step2: {
           objetivo: cotacao.objetivo,
-          definicaoCampanha: ['PROGRAMATICA'],
+          definicaoCampanha: estrategia?.definicaoCampanha || ['PROGRAMATICA'],
+          servicosMensageria: estrategia?.servicosMensageria || [],
+          modelosPerformance: estrategia?.performance?.modelos || [],
+          modeloPerformanceOutro: estrategia?.performance?.modeloOutro || '',
+          cplCamposCadastro: estrategia?.performance?.cplCamposCadastro || '',
+          cplExigiuFiltro: estrategia?.performance?.cplExigiuFiltro,
+          cplQualFiltro: estrategia?.performance?.cplQualFiltro || '',
+          cplConversaoLeadCompleta: estrategia?.performance?.cplConversaoLeadCompleta || '',
+          veiculaOutrasRedes: estrategia?.performance?.veiculaOutrasRedes,
+          veiculaQuaisRedes: estrategia?.performance?.veiculaQuaisRedes || '',
+          clienteSugeriuValor: estrategia?.performance?.clienteSugeriuValor,
+          clienteValorSugerido: estrategia?.performance?.clienteValorSugerido || '',
+          modelosProgramatica: estrategia?.programatica?.modelos || [],
+          modeloProgramaticaOutro: estrategia?.programatica?.modeloOutro || '',
+          segmentacaoExigida: estrategia?.programatica?.segmentacaoExigida || '',
+          kpiObjetivo: estrategia?.programatica?.kpiObjetivo || '',
+          precisaDadosAudiencia: estrategia?.programatica?.precisaDadosAudiencia,
           maturidadeDigital: cotacao.maturidadeDigital,
           aceitaModeloHibrido: cotacao.aceitaModeloHibrido,
           risco: cotacao.risco,
@@ -102,10 +138,27 @@ export default function EditarCotacaoPage({
           tipoRegiao: 'NACIONAL',
         } as Step3Data,
       });
+
+      setCotacaoExistente({
+        id: cotacao.id,
+        mix: Array.isArray(cotacao.mixSugerido) ? cotacao.mixSugerido : [],
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar cotação');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const extrairPayloadObservacoes = (observacoes: unknown): any | null => {
+    if (typeof observacoes !== 'string' || observacoes.trim() === '') {
+      return null;
+    }
+
+    try {
+      return JSON.parse(observacoes);
+    } catch {
+      return null;
     }
   };
 
@@ -157,7 +210,7 @@ export default function EditarCotacaoPage({
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-screen-2xl px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-primary-dark mb-2">
             Editar Cotação
@@ -233,6 +286,7 @@ export default function EditarCotacaoPage({
                 step2: wizardData.step2!,
                 step3: wizardData.step3!,
               }}
+              cotacaoExistente={cotacaoExistente}
               onBack={() => setCurrentStep(3)}
               onSave={handleStep4Save}
             />

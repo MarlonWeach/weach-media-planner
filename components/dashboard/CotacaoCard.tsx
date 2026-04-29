@@ -139,10 +139,15 @@ export function CotacaoCard({
         <button
           onClick={async () => {
             try {
+              const token = localStorage.getItem('auth_token');
+              if (!token) {
+                throw new Error('Sessão expirada');
+              }
+
               const response = await fetch(`/api/cotacao/${id}/pdf`, {
                 method: 'POST',
                 headers: {
-                  'x-user-id': '00000000-0000-0000-0000-000000000000', // TODO: Obter do contexto
+                  Authorization: `Bearer ${token}`,
                 },
               });
 
