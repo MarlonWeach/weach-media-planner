@@ -7,8 +7,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, podeAcessarCotacao } from '@/lib/utils/auth';
 import { gerarPDF } from '@/lib/pdf/geradorPDF';
+import {
+  resolveCotacaoEmailRecipients,
+  sendCotacaoOperationalEmail,
+} from '@/lib/notifications/cotacaoEmail';
 import path from 'path';
 import fs from 'fs';
+
+type DefinicaoCampanha = 'PERFORMANCE' | 'PROGRAMATICA' | 'WHATSAPP_SMS_PUSH';
+
+function extrairDefinicaoCampanhaDaObservacao(observacoes: string | null): DefinicaoCampanha[] {
+  if (!observacoes) return [];
+  try {
+    const parsed = JSON.parse(observacoes) as {
+      estrategia?: { definicaoCampanha?: string[] };
+    };
+    const lista = parsed?.estrategia?.definicaoCampanha || [];
+    return lista.filter(
+      (item): item is DefinicaoCampanha =>
+        item === 'PERFORMANCE' || item === 'PROGRAMATICA' || item === 'WHATSAPP_SMS_PUSH'
+    );
+  } catch {
+    return [];
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -122,6 +144,71 @@ export async function POST(
       where: { id: cotacaoId },
       data: { pdfUrl },
     });
+
+    // Dispara e-mail operacional quando a cotação é efetivamente enviada para análise
+    // (na geração do PDF), evitando disparo no momento de criação de rascunho.
+    const definicaoCampanha = extrairDefinicaoCampanhaDaObservacao(cotacao.observacoes);
+    const recipients = resolveCotacaoEmailRecipients({
+      definicaoCampanha,
+      solicitanteEmail: cotacao.solicitanteEmail || undefined,
+    });
+
+    if (recipients.warnings.length > 0) {
+      console.warn(
+        '[CotacaoEmail][warnings]',
+        JSON.stringify({ cotacaoId, warnings: recipients.warnings })
+      );
+    }
+
+    if (recipients.shouldSend && cotacao.status !== 'ENVIADA') {
+      try {
+        if (recipients.to.length === 0) {
+          throw new Error('Destinatário principal ausente (EMAIL_COTACAO_TO).');
+        }
+
+        await sendCotacaoOperationalEmail(
+          {
+            cotacaoId: cotacao.id,
+            clienteNome: cotacao.clienteNome,
+            clienteSegmento: cotacao.clienteSegmento,
+            objetivo: cotacao.objetivo,
+            budget: Number(cotacao.budget),
+            regiao: cotacao.regiao,
+            definicaoCampanha,
+            solicitanteNome: cotacao.solicitanteNome || undefined,
+            solicitanteEmail: cotacao.solicitanteEmail || undefined,
+            agenciaNome: cotacao.agenciaNome || undefined,
+            observacoes: cotacao.observacoes || undefined,
+          },
+          {
+            to: recipients.to,
+            cc: recipients.cc,
+          }
+        );
+
+        await prisma.wp_Cotacao.update({
+          where: { id: cotacaoId },
+          data: { status: 'ENVIADA' },
+        });
+      } catch (emailError) {
+        console.error(
+          '[CotacaoEmail][erro]',
+          JSON.stringify({ cotacaoId, required: recipients.required, emailError })
+        );
+        if (recipients.required) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                'PDF gerado, mas o envio de e-mail obrigatório para análise de performance falhou. Revise configuração SMTP/destinatários.',
+              cotacaoId,
+              pdfUrl,
+            },
+            { status: 500 }
+          );
+        }
+      }
+    }
 
     return NextResponse.json({
       success: true,
