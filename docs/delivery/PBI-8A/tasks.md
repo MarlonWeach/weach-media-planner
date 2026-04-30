@@ -1,7 +1,7 @@
 # Tasks - PBI-8A: Workflow de Cotação por E-mail
 
 ## Status Geral
-🔄 InProgress
+✅ Done
 
 ## Tasks
 
@@ -12,7 +12,9 @@
 | 8A-3 | Implementar template de e-mail com resumo estruturado do briefing/cotação | ✅ Done | ⚠️ Alta |
 | 8A-4 | Integrar disparo de e-mail ao fluxo de criação/atualização de cotação | ✅ Done | ⚠️ Alta |
 | 8A-5 | Implementar logging e status operacional de envio/análise | ✅ Done | ⚠️ Alta |
-| 8A-6 | Expor histórico de envios no painel administrativo | 📌 Pendente | 📌 Média |
+| 8A-6 | Expor histórico de envios no painel administrativo | ✅ Done | 📌 Média |
+| 8A-7 | Implementar exclusão de cotação restrita a ADMIN | ✅ Done | ⚠️ Alta |
+| 8A-8 | Anexar PDF de briefing (espelho do formulário) apenas no e-mail operacional | ✅ Done | ⚠️ Alta |
 
 ## Ordem Recomendada
 1. `8A-1` regra de negócio do disparo

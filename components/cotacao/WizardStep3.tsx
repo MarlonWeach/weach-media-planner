@@ -16,6 +16,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { FormField } from './FormField';
 import dayjs from 'dayjs';
+import { identificarCidadesNaoReconhecidas } from '@/lib/utils/cidades';
 
 const tiposRegiao = [
   { value: 'NACIONAL', label: 'Nacional' },
@@ -107,6 +108,8 @@ export function WizardStep3({
     watch,
     setValue,
     setFocus,
+    setError,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<Step3Data>({
     resolver: zodResolver(schemaStep3),
@@ -118,6 +121,20 @@ export function WizardStep3({
   });
 
   const handleFormSubmit = (data: Step3Data) => {
+    if (data.tipoRegiao === 'CIDADES' && data.cidades) {
+      const cidadesNaoReconhecidas = identificarCidadesNaoReconhecidas(data.cidades);
+      if (cidadesNaoReconhecidas.length > 0) {
+        setError('cidades', {
+          type: 'manual',
+          message: `Não identificamos as cidades: ${cidadesNaoReconhecidas.join(
+            ', '
+          )}. Confira a escrita e tente novamente.`,
+        });
+        return;
+      }
+      clearErrors('cidades');
+    }
+
     if (data.tipoRegiao !== 'ESTADO') {
       data.estadosSelecionados = [];
     }

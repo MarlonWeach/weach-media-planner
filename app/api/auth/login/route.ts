@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth/password';
 import { generateToken } from '@/lib/auth/session';
+import { mapDbRoleToUi } from '@/lib/utils/roles';
 
 const schemaLogin = z.object({
   email: z.string().email('Email inválido'),
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         id: usuario.id,
         nome: usuario.nome,
         email: usuario.email,
-        role: usuario.role,
+        role: mapDbRoleToUi(usuario.role),
       },
     });
   } catch (error) {

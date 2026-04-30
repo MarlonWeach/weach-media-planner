@@ -59,6 +59,13 @@ export default function AdminPage() {
       color: 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100',
     },
     {
+      title: 'Usuários de Acesso',
+      description: 'Provisionar acesso por solicitante e gerenciar roles',
+      href: '/admin/usuarios',
+      icon: '🧑‍💼',
+      color: 'bg-violet-50 border-violet-200 hover:bg-violet-100',
+    },
+    {
       title: 'Regras de Preço',
       description: 'Gerenciar fixos e condicionais em uma única tela',
       href: '/admin/regras-preco',
@@ -85,6 +92,13 @@ export default function AdminPage() {
       href: '/admin/logs',
       icon: '📝',
       color: 'bg-gray-50 border-gray-200 hover:bg-gray-100',
+    },
+    {
+      title: 'Histórico de Envios',
+      description: 'Acompanhar cotações enviadas e status operacional',
+      href: '/admin/envios',
+      icon: '📤',
+      color: 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100',
     },
   ];
 

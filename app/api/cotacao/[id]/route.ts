@@ -4,8 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { obterUserIdDoRequest, podeAcessarCotacao } from '@/lib/utils/auth';
+import { obterUserIdDoRequest, podeAcessarCotacao, usuarioTemRole } from '@/lib/utils/auth';
 
 export async function GET(
   request: NextRequest,
@@ -137,6 +138,61 @@ export async function GET(
 
     return NextResponse.json(
       { success: false, error: 'Erro ao buscar cotação' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const cotacaoId = params.id;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(cotacaoId)) {
+      return NextResponse.json(
+        { success: false, error: 'ID de cotação inválido' },
+        { status: 400 }
+      );
+    }
+
+    const userId = obterUserIdDoRequest(request.headers);
+    const isAdmin = await usuarioTemRole(userId, [Role.ADMIN]);
+    if (!isAdmin) {
+      return NextResponse.json(
+        { success: false, error: 'Acesso negado. Apenas administradores.' },
+        { status: 403 }
+      );
+    }
+
+    const cotacao = await prisma.wp_Cotacao.findUnique({
+      where: { id: cotacaoId },
+      select: { id: true },
+    });
+
+    if (!cotacao) {
+      return NextResponse.json(
+        { success: false, error: 'Cotação não encontrada' },
+        { status: 404 }
+      );
+    }
+
+    await prisma.$transaction([
+      prisma.wp_LogAlteracaoPreco.deleteMany({ where: { cotacaoId } }),
+      prisma.wp_HistoricoIA.deleteMany({ where: { cotacaoId } }),
+      prisma.wp_Cotacao.delete({ where: { id: cotacaoId } }),
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Cotação excluída com sucesso',
+      cotacaoId,
+    });
+  } catch (error) {
+    console.error('Erro ao excluir cotação:', error);
+    return NextResponse.json(
+      { success: false, error: 'Erro ao excluir cotação' },
       { status: 500 }
     );
   }

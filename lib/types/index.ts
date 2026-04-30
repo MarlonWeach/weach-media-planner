@@ -2,7 +2,7 @@
  * Tipos compartilhados do sistema
  */
 
-export type Role = 'ADMIN' | 'COMERCIAL' | 'EXTERNO';
+export type Role = 'ADMIN' | 'MANAGER' | 'COMERCIAL';
 export type Segmento = 'AUTOMOTIVO' | 'FINANCEIRO' | 'VAREJO' | 'IMOBILIARIO' | 'SAUDE' | 'EDUCACAO' | 'TELECOM' | 'SERVICOS' | 'OUTROS';
 export type Objetivo = 'AWARENESS' | 'CONSIDERACAO' | 'LEADS' | 'VENDAS';
 export type MaturidadeDigital = 'BAIXA' | 'MEDIA' | 'ALTA';

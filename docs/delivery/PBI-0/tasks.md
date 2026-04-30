@@ -14,7 +14,8 @@
 | 0-5 | Implementar motor determinístico | ✅ Done | - |
 | 0-6 | Criar rotas de API básicas | ✅ Done | - |
 | 0-7 | Implementar agentes de IA | ✅ Done | - |
+| 0-8 | Configurar regra de recap automático após 1h de inatividade | ✅ Done | - |
 
 ## Observações
-Todas as tasks desta fase foram concluídas durante a inicialização do projeto.
+Task `0-8` foi aberta para configurar regra operacional de contexto no Cursor sem impactar as regras já existentes.
 

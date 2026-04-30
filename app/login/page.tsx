@@ -34,6 +34,8 @@ function LoginForm() {
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(schemaLogin),
+    mode: 'onSubmit',
+    reValidateMode: 'onSubmit',
   });
 
   // Redireciona se já estiver autenticado

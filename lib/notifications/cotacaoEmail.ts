@@ -46,6 +46,7 @@ interface SendCotacaoEmailInput {
     cplEstimado?: number;
   };
   cotacaoProativa?: boolean;
+  attachments?: Array<{ path: string; filename: string }>;
   attachmentPath?: string;
   attachmentFilename?: string;
 }
@@ -296,8 +297,14 @@ function extrairObservacoesGerais(observacoes?: string): string {
     if (typeof texto === 'string' && texto.trim() !== '') {
       return texto.trim();
     }
+    // Se conseguimos parsear JSON mas o campo veio vazio, não retornar payload bruto.
+    return 'Sem observações.';
   } catch {
     // Mantém fallback para textos livres
+  }
+  const textoLivre = observacoes.trim();
+  if (textoLivre.startsWith('{') && textoLivre.endsWith('}')) {
+    return 'Sem observações.';
   }
   return observacoes;
 }
@@ -311,8 +318,11 @@ function formatCurrency(value: number, casasDecimais = 2): string {
   }).format(Number.isFinite(value) ? value : 0);
 }
 
-function getCasasDecimaisPreco(modelo: string): number {
-  return modelo === 'CPV' ? 3 : 2;
+function getCasasDecimaisPreco(modelo: string, canal?: string): number {
+  if (modelo === 'CPC') return 2;
+  if (modelo === 'CPV' && canal === 'CTV') return 4;
+  if (modelo === 'CPV') return 3;
+  return 2;
 }
 
 function formatNumber(value: number): string {
@@ -407,7 +417,7 @@ function buildPlanoRows(input: SendCotacaoEmailInput): string {
           <td style="padding:8px 10px;border:1px solid #e5e7eb;text-align:right;">${escapeHtml(percentual.toFixed(1))}%</td>
           <td style="padding:8px 10px;border:1px solid #e5e7eb;text-align:right;">${escapeHtml(formatCurrency(budgetLinha))}</td>
           <td style="padding:8px 10px;border:1px solid #e5e7eb;">${escapeHtml(modelo)}</td>
-          <td style="padding:8px 10px;border:1px solid #e5e7eb;text-align:right;">${escapeHtml(formatCurrency(precoUnit, getCasasDecimaisPreco(modelo)))}</td>
+          <td style="padding:8px 10px;border:1px solid #e5e7eb;text-align:right;">${escapeHtml(formatCurrency(precoUnit, getCasasDecimaisPreco(modelo, item.canal)))}</td>
           <td style="padding:8px 10px;border:1px solid #e5e7eb;">${escapeHtml(`${formatNumber(entrega)} ${getDescricaoEntrega(modelo)}`)}</td>
         </tr>
       `;
@@ -435,7 +445,7 @@ function buildPlanoTexto(input: SendCotacaoEmailInput): string {
       const canalLabel = item.formato
         ? `${getNomeCanal(item.canal)} - ${item.formato}`
         : getNomeCanal(item.canal);
-      return `- ${canalLabel} | ${percentual.toFixed(1)}% | ${formatCurrency(budgetLinha)} | ${modelo} ${formatCurrency(precoUnit, getCasasDecimaisPreco(modelo))} | ${formatNumber(entrega)} ${getDescricaoEntrega(modelo)}`;
+      return `- ${canalLabel} | ${percentual.toFixed(1)}% | ${formatCurrency(budgetLinha)} | ${modelo} ${formatCurrency(precoUnit, getCasasDecimaisPreco(modelo, item.canal))} | ${formatNumber(entrega)} ${getDescricaoEntrega(modelo)}`;
     })
     .join('\n');
 }
@@ -476,8 +486,10 @@ export async function sendCotacaoOperationalEmail(
     text: buildEmailBody(input),
     html: buildEmailHtml(input),
     attachments:
-      input.attachmentPath && input.attachmentFilename
-        ? [{ filename: input.attachmentFilename, path: input.attachmentPath }]
-        : undefined,
+      input.attachments && input.attachments.length > 0
+        ? input.attachments.map((item) => ({ filename: item.filename, path: item.path }))
+        : input.attachmentPath && input.attachmentFilename
+          ? [{ filename: input.attachmentFilename, path: input.attachmentPath }]
+          : undefined,
   });
 }

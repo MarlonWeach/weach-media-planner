@@ -280,7 +280,7 @@ function adicionarPlanoMidia(doc: PDFKitDocument, dados: DadosCotacao) {
       canal: formatarNomeCanal(item.canal),
       formato: item.formato || '-',
       modelo: modeloCompra,
-      preco: formatarMoeda(precoUnitario, obterCasasDecimaisPreco(modeloCompra)),
+      preco: formatarMoeda(precoUnitario, obterCasasDecimaisPreco(modeloCompra, item.canal)),
       pct: `${item.percentual.toFixed(1)}%`,
       budget: formatarMoeda(valorBudget),
       entrega: `${formatarNumero(entregaQuantidade)} ${entregaDescricao}`,
@@ -459,8 +459,11 @@ function formatarMoeda(valor: number, casasDecimais = 2): string {
   }).format(valor);
 }
 
-function obterCasasDecimaisPreco(modeloCompra: string): number {
-  return modeloCompra === 'CPV' ? 3 : 2;
+function obterCasasDecimaisPreco(modeloCompra: string, canal?: string): number {
+  if (modeloCompra === 'CPC') return 2;
+  if (modeloCompra === 'CPV' && canal === 'CTV') return 4;
+  if (modeloCompra === 'CPV') return 3;
+  return 2;
 }
 
 function formatarNumero(valor: number): string {

@@ -12,7 +12,7 @@ interface Usuario {
   id: string;
   nome: string;
   email: string;
-  role: 'ADMIN' | 'COMERCIAL' | 'EXTERNO';
+  role: 'ADMIN' | 'MANAGER' | 'COMERCIAL';
 }
 
 interface AuthContextType {

@@ -8,6 +8,7 @@
 
 import Link from 'next/link';
 import dayjs from 'dayjs';
+import { useAuth } from '@/lib/contexts/AuthContext';
 
 interface CotacaoCardProps {
   id: string;
@@ -18,6 +19,7 @@ interface CotacaoCardProps {
   createdAt: Date;
   updatedAt: Date;
   vendedorNome: string;
+  onDeleted?: () => void;
 }
 
 export function CotacaoCard({
@@ -29,7 +31,9 @@ export function CotacaoCard({
   createdAt,
   updatedAt,
   vendedorNome,
+  onDeleted,
 }: CotacaoCardProps) {
+  const { isAdmin } = useAuth();
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -167,6 +171,42 @@ export function CotacaoCard({
         >
           PDF
         </button>
+        {isAdmin && (
+          <button
+            onClick={async () => {
+              const confirmou = window.confirm(
+                'Tem certeza que deseja excluir esta cotação? Esta ação não pode ser desfeita.'
+              );
+              if (!confirmou) return;
+
+              try {
+                const token = localStorage.getItem('auth_token');
+                if (!token) {
+                  throw new Error('Sessão expirada');
+                }
+
+                const response = await fetch(`/api/cotacao/${id}`, {
+                  method: 'DELETE',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                });
+
+                if (!response.ok) {
+                  const data = await response.json().catch(() => null);
+                  throw new Error(data?.error || 'Erro ao excluir cotação');
+                }
+
+                onDeleted?.();
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Erro ao excluir cotação.');
+              }
+            }}
+            className="px-4 py-2 text-sm text-red-700 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            Excluir
+          </button>
+        )}
       </div>
     </div>
   );

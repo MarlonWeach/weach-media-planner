@@ -6,7 +6,6 @@
  */
 
 import { calcularTodosPrecosProgramaticos } from './formulasProgramaticas';
-import { calcularDescontoPorBudget } from './cenarios';
 import { validarPreco, RegraGovernanca } from './regrasGovernanca';
 import { prisma } from '@/lib/prisma';
 
@@ -27,6 +26,7 @@ export interface PrecosCalculados {
   social: any;
   descontoAplicado: number;
   multiplicadorRegional: number;
+  cpmBaseAplicado: number;
 }
 
 export interface DiagnosticoPricing {
@@ -59,19 +59,20 @@ export async function calcularPrecosCotacao(
   parametros: ParametrosCalculo
 ): Promise<PrecosCalculados> {
   const valoresFixosBanco = await carregarValoresFixosPricing();
-  const cpmBase = valoresFixosBanco.display?.cpmBase ?? parametros.cpmBase;
+  const cpmBaseNacional = valoresFixosBanco.display?.cpmBase ?? parametros.cpmBase;
+  const cpmBaseRegional = obterCpmBaseRegional(parametros.regiao, cpmBaseNacional);
 
-  // 2. Calcula preços base programáticos
+  // 2. Calcula preços base programáticos considerando regionalização
   const precosBase = calcularTodosPrecosProgramaticos(
-    cpmBase,
+    cpmBaseRegional,
     mergeValoresFixos(parametros.valoresFixos, valoresFixosBanco)
   );
 
   // Task 1-15:
-  // Para o resultado do plano no wizard, o usuário espera valores-base da tabela
-  // (sem ajuste de desconto por budget e sem multiplicador regional).
+  // Para o resultado do plano no wizard, o usuário espera valores-base da tabela.
+  // Mantemos sem ajuste de desconto por budget, porém com CPM regional aplicado.
   // Mantemos os campos de diagnóstico no retorno para evoluções futuras.
-  const multiplicadorRegional = 1;
+  const multiplicadorRegional = cpmBaseNacional > 0 ? cpmBaseRegional / cpmBaseNacional : 1;
   const desconto = 0;
   const precosFinais = precosBase;
 
@@ -79,6 +80,7 @@ export async function calcularPrecosCotacao(
     ...precosFinais,
     descontoAplicado: desconto,
     multiplicadorRegional,
+    cpmBaseAplicado: cpmBaseRegional,
   };
 }
 
@@ -209,6 +211,23 @@ function mergeValoresFixos(valoresFormulario: any, valoresBanco: any) {
     audio: { ...(valoresBanco?.audio || {}), ...(valoresFormulario?.audio || {}) },
     social: { ...(valoresBanco?.social || {}), ...(valoresFormulario?.social || {}) },
   };
+}
+
+function obterCpmBaseRegional(regiao: string, cpmBaseNacional: number): number {
+  // Referência de negócio (planilha): Nacional=4, Estados=7, Cidades grandes=8, Cidades pequenas=9.
+  // Mantemos a proporção via deltas sobre o CPM base nacional configurado.
+  const deltaPorRegiao: Record<string, number> = {
+    NACIONAL: 0,
+    SP_CAPITAL: 4,
+    SUDESTE_EXCETO_SP: 3,
+    SUL: 3,
+    CENTRO_OESTE: 3,
+    NORDESTE: 3,
+    NORTE: 3,
+    CIDADES_MENORES: 5,
+  };
+
+  return cpmBaseNacional + (deltaPorRegiao[regiao] ?? 0);
 }
 
 /**

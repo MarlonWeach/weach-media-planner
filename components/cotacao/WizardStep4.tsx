@@ -47,6 +47,114 @@ const VIDEO_CVR_15S = 0.8; // 80%
 const VIDEO_CVR_30S = 0.75; // 75%
 const VIDEO_CVR_CTV = 0.95; // 95%
 const VIDEO_CVR_DEFAULT = 0.75;
+const CIDADES_GRANDES_ALIASES: Record<string, string[]> = {
+  'sao paulo': ['sao paulo', 'são paulo', 'sao paulo sp', 'são paulo sp', 'sao paulo-sp', 'são paulo-sp', 'sao paulo capital', 'são paulo capital', 'sao capital', 'são capital'],
+  'rio de janeiro': ['rio de janeiro', 'rio de janeiro rj', 'rio de janeiro-rj', 'rio rj', 'rio de janeiro capital', 'rio capital'],
+  'belo horizonte': ['belo horizonte', 'belo horizonte mg', 'belo horizonte-mg'],
+  brasilia: ['brasilia', 'brasília', 'brasilia df', 'brasília df'],
+  salvador: ['salvador', 'salvador ba', 'salvador-ba'],
+  fortaleza: ['fortaleza', 'fortaleza ce', 'fortaleza-ce'],
+  recife: ['recife', 'recife pe', 'recife-pe'],
+  'porto alegre': ['porto alegre', 'porto alegre rs', 'porto alegre-rs'],
+  curitiba: ['curitiba', 'curitiba pr', 'curitiba-pr'],
+  manaus: ['manaus', 'manaus am', 'manaus-am'],
+  belem: ['belem', 'belém', 'belem pa', 'belém pa'],
+  goiania: ['goiania', 'goiânia', 'goiania go', 'goiânia go'],
+  guarulhos: ['guarulhos', 'guarulhos sp', 'guarulhos-sp'],
+  campinas: ['campinas', 'campinas sp', 'campinas-sp'],
+  'sao luis': ['sao luis', 'são luís', 'sao luis ma'],
+  maceio: ['maceio', 'maceió', 'maceio al'],
+  natal: ['natal', 'natal rn'],
+  'joao pessoa': ['joao pessoa', 'joão pessoa', 'joao pessoa pb'],
+  florianopolis: ['florianopolis', 'florianópolis', 'florianopolis sc'],
+  vitoria: ['vitoria', 'vitória', 'vitoria es'],
+  santos: ['santos', 'santos sp'],
+  'sao bernardo do campo': ['sao bernardo do campo', 'são bernardo do campo', 'sbc'],
+  'santo andre': ['santo andre', 'santo andré', 'santo andre sp'],
+  osasco: ['osasco', 'osasco sp'],
+  'ribeirao preto': ['ribeirao preto', 'ribeirão preto', 'ribeirao preto sp'],
+  sorocaba: ['sorocaba', 'sorocaba sp'],
+  niteroi: ['niteroi', 'niterói', 'niteroi rj'],
+  'duque de caxias': ['duque de caxias', 'duque de caxias rj'],
+  'nova iguacu': ['nova iguacu', 'nova iguaçu', 'nova iguacu rj'],
+  'sao goncalo': ['sao goncalo', 'são gonçalo', 'sao goncalo rj'],
+  teresina: ['teresina', 'teresina pi'],
+  'campo grande': ['campo grande', 'campo grande ms'],
+  'jaboatao dos guararapes': ['jaboatao dos guararapes', 'jaboatão dos guararapes'],
+  contagem: ['contagem', 'contagem mg'],
+  joinville: ['joinville', 'joinville sc'],
+  uberlandia: ['uberlandia', 'uberlândia', 'uberlandia mg'],
+  aracaju: ['aracaju', 'aracaju se'],
+  'feira de santana': ['feira de santana', 'feira de santana ba'],
+  cuiaba: ['cuiaba', 'cuiabá', 'cuiaba mt'],
+  'aparecida de goiania': ['aparecida de goiania', 'aparecida de goiânia'],
+  londrina: ['londrina', 'londrina pr'],
+  'juiz de fora': ['juiz de fora', 'juiz de fora mg'],
+  serra: ['serra', 'serra es'],
+  'campos dos goytacazes': ['campos dos goytacazes', 'campos rj'],
+  'belford roxo': ['belford roxo', 'belford roxo rj'],
+  'vila velha': ['vila velha', 'vila velha es'],
+  ananindeua: ['ananindeua', 'ananindeua pa'],
+  'sao jose dos campos': ['sao jose dos campos', 'são josé dos campos', 'sjc'],
+  macapa: ['macapa', 'macapá'],
+  'sao joao de meriti': ['sao joao de meriti', 'são joão de meriti'],
+};
+
+const CIDADES_GRANDES_VARIACOES = new Set(
+  Object.values(CIDADES_GRANDES_ALIASES)
+    .flat()
+    .map((cidade) => normalizarNomeCidade(cidade))
+);
+
+function normalizarNomeCidade(cidade: string): string {
+  return String(cidade || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function distanciaLevenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= n; j += 1) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i += 1) {
+    for (let j = 1; j <= n; j += 1) {
+      const custo = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + custo
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+function ehCidadeGrande(nomeCidade: string): boolean {
+  const cidadeNormalizada = normalizarNomeCidade(nomeCidade);
+  if (!cidadeNormalizada) return false;
+  if (CIDADES_GRANDES_VARIACOES.has(cidadeNormalizada)) return true;
+
+  // Fuzzy leve para typos comuns: ex "sao paol".
+  const maxDistancia = cidadeNormalizada.length <= 6 ? 1 : 2;
+  for (const variacao of CIDADES_GRANDES_VARIACOES) {
+    const diffTamanho = Math.abs(variacao.length - cidadeNormalizada.length);
+    if (diffTamanho > maxDistancia) continue;
+    if (distanciaLevenshtein(cidadeNormalizada, variacao) <= maxDistancia) {
+      return true;
+    }
+  }
+  return false;
+}
 
 interface WizardStep4Props {
   dadosPassos: {
@@ -925,7 +1033,17 @@ export function WizardStep4({
       return 'SUDESTE_EXCETO_SP';
     }
 
-    return 'CIDADES_MENORES';
+    const cidadesInformadas = String(step3?.cidades || '')
+      .split(',')
+      .map((cidade: string) => cidade.trim())
+      .filter(Boolean);
+
+    const existeCidadeGrande = cidadesInformadas.some((cidade: string) => ehCidadeGrande(cidade));
+
+    // No modelo atual do motor:
+    // - SP_CAPITAL representa bucket de "cidades grandes" (CPM base 8)
+    // - CIDADES_MENORES representa bucket de "cidades pequenas" (CPM base 9)
+    return existeCidadeGrande ? 'SP_CAPITAL' : 'CIDADES_MENORES';
   };
 
   const montarObservacoesCompletas = (dados: any): string => {

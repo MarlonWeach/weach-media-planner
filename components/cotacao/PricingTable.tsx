@@ -79,10 +79,22 @@ export function PricingTable({
   };
 
   const obterCasasDecimaisPreco = (item: ItemPlanoMidia) =>
-    item.modeloCompra === 'CPV' ? 3 : 2;
+    item.modeloCompra === 'CPC'
+      ? 2
+      : item.modeloCompra === 'CPV' && item.canal === 'CTV'
+        ? 4
+        : item.modeloCompra === 'CPV'
+          ? 3
+          : 2;
 
   const obterStepPreco = (item: ItemPlanoMidia) =>
-    item.modeloCompra === 'CPV' ? '0.001' : '0.01';
+    item.modeloCompra === 'CPC'
+      ? '0.01'
+      : item.modeloCompra === 'CPV' && item.canal === 'CTV'
+        ? '0.0001'
+        : item.modeloCompra === 'CPV'
+          ? '0.001'
+          : '0.01';
 
   // Formatação de número
   const formatarNumero = (valor: number) => {
@@ -333,7 +345,7 @@ export function PricingTable({
                   <input
                     key={`preco-${index}-${item.preco}`}
                     type="number"
-                    step="0.01"
+                    step={obterStepPreco(item)}
                     min="0"
                     defaultValue={item.preco}
                     onBlur={(e) => {

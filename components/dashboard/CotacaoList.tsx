@@ -23,6 +23,12 @@ interface Cotacao {
   };
 }
 
+interface SolicitanteFiltro {
+  id: string;
+  nome: string;
+  email: string;
+}
+
 interface CotacaoListProps {
   userId?: string;
 }
@@ -34,10 +40,13 @@ export function CotacaoList({ userId }: CotacaoListProps) {
   const [filtros, setFiltros] = useState({
     segmento: '',
     status: '',
+    solicitanteId: '',
     busca: '',
     dataInicio: '',
     dataFim: '',
   });
+  const [statusOptions, setStatusOptions] = useState<string[]>([]);
+  const [solicitanteOptions, setSolicitanteOptions] = useState<SolicitanteFiltro[]>([]);
   const [paginacao, setPaginacao] = useState({
     page: 1,
     limit: 10,
@@ -57,6 +66,7 @@ export function CotacaoList({ userId }: CotacaoListProps) {
       const params = new URLSearchParams();
       if (filtros.segmento) params.append('segmento', filtros.segmento);
       if (filtros.status) params.append('status', filtros.status);
+      if (filtros.solicitanteId) params.append('solicitanteId', filtros.solicitanteId);
       if (filtros.busca) params.append('busca', filtros.busca);
       if (filtros.dataInicio) params.append('dataInicio', filtros.dataInicio);
       if (filtros.dataFim) params.append('dataFim', filtros.dataFim);
@@ -85,6 +95,8 @@ export function CotacaoList({ userId }: CotacaoListProps) {
       const data = await response.json();
       setCotacoes(data.cotacoes);
       setPaginacao(data.paginacao);
+      setStatusOptions(data.filtros?.status || []);
+      setSolicitanteOptions(data.filtros?.solicitantes || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro desconhecido');
     } finally {
@@ -114,16 +126,11 @@ export function CotacaoList({ userId }: CotacaoListProps) {
     { value: 'OUTROS', label: 'Outros' },
   ];
 
-  const statuses = [
-    { value: '', label: 'Todos os status' },
-    { value: 'RASCUNHO', label: 'Rascunho' },
-    { value: 'ENVIADA', label: 'Enviada' },
-    { value: 'APROVADA', label: 'Aprovada' },
-    { value: 'RECUSADA', label: 'Recusada' },
-    { value: 'EM_EXECUCAO', label: 'Em Execução' },
-    { value: 'FINALIZADA', label: 'Finalizada' },
-    { value: 'AGUARDANDO_APROVACAO', label: 'Aguardando Aprovação' },
-  ];
+  const formatarStatus = (status: string) =>
+    status
+      .toLowerCase()
+      .replaceAll('_', ' ')
+      .replace(/\b\w/g, (letra) => letra.toUpperCase());
 
   if (loading && cotacoes.length === 0) {
     return (
@@ -153,7 +160,7 @@ export function CotacaoList({ userId }: CotacaoListProps) {
       {/* Filtros */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtros</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Buscar
@@ -191,9 +198,28 @@ export function CotacaoList({ userId }: CotacaoListProps) {
               onChange={(e) => handleFiltroChange('status', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
             >
-              {statuses.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
+              <option value="">Todos os status</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {formatarStatus(status)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Solicitante
+            </label>
+            <select
+              value={filtros.solicitanteId}
+              onChange={(e) => handleFiltroChange('solicitanteId', e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              <option value="">Todos os solicitantes</option>
+              {solicitanteOptions.map((solicitante) => (
+                <option key={solicitante.id} value={solicitante.id}>
+                  {solicitante.nome}
+                  {solicitante.email ? ` (${solicitante.email})` : ''}
                 </option>
               ))}
             </select>
@@ -248,6 +274,7 @@ export function CotacaoList({ userId }: CotacaoListProps) {
                 createdAt={new Date(cotacao.createdAt)}
                 updatedAt={new Date(cotacao.updatedAt)}
                 vendedorNome={cotacao.vendedor.nome}
+                onDeleted={buscarCotacoes}
               />
             ))}
           </div>

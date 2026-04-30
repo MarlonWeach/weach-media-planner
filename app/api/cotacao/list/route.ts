@@ -38,17 +38,20 @@ export async function GET(request: NextRequest) {
     const dataInicio = searchParams.get('dataInicio');
     const dataFim = searchParams.get('dataFim');
     const busca = searchParams.get('busca');
+    const solicitanteId = searchParams.get('solicitanteId');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const skip = (page - 1) * limit;
 
-    // Construir filtros
-    const where: any = {};
+    // Base de visibilidade (admin vê todas, comercial vê apenas suas)
+    const baseWhere: any = {};
 
-    // Admin vê todas, comercial vê apenas suas
     if (usuario.role !== 'ADMIN') {
-      where.vendedorId = userId;
+      baseWhere.vendedorId = userId;
     }
+
+    // Filtros da listagem
+    const where: any = { ...baseWhere };
 
     if (segmento) {
       where.clienteSegmento = segmento;
@@ -71,11 +74,23 @@ export async function GET(request: NextRequest) {
     if (busca) {
       where.clienteNome = {
         contains: busca,
+        mode: 'insensitive',
       };
     }
 
-    // Buscar cotações
-    const [cotacoes, total] = await Promise.all([
+    if (solicitanteId) {
+      where.solicitanteId = solicitanteId;
+    }
+
+    // Filtro dinâmico: status reais por dados visíveis ao usuário
+    const whereSemStatus = { ...where };
+    delete whereSemStatus.status;
+
+    // Filtro dinâmico: solicitantes reais por dados visíveis ao usuário
+    const whereSemSolicitante = { ...where };
+    delete whereSemSolicitante.solicitanteId;
+
+    const [cotacoes, total, statusRows, solicitantesRows] = await Promise.all([
       prisma.wp_Cotacao.findMany({
         where,
         skip,
@@ -98,6 +113,21 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.wp_Cotacao.count({ where }),
+      prisma.wp_Cotacao.groupBy({
+        by: ['status'],
+        where: whereSemStatus,
+        orderBy: { status: 'asc' },
+      }),
+      prisma.wp_Cotacao.findMany({
+        where: whereSemSolicitante,
+        distinct: ['solicitanteId'],
+        select: {
+          solicitanteId: true,
+          solicitanteNome: true,
+          solicitanteEmail: true,
+        },
+        orderBy: { solicitanteNome: 'asc' },
+      }),
     ]);
 
     return NextResponse.json({
@@ -117,6 +147,16 @@ export async function GET(request: NextRequest) {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+      },
+      filtros: {
+        status: statusRows.map((row) => row.status),
+        solicitantes: solicitantesRows
+          .filter((item) => !!item.solicitanteId)
+          .map((item) => ({
+            id: item.solicitanteId as string,
+            nome: item.solicitanteNome || 'Não informado',
+            email: item.solicitanteEmail || '',
+          })),
       },
     });
   } catch (error) {

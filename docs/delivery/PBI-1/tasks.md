@@ -25,6 +25,7 @@
 | 1-16 | Tornar distribuição de budget por formato guiada por IA | ✅ Done | ⚠️ Alta |
 | 1-17 | Ajustar layout responsivo da página de resultado da cotação | ✅ Done | 📌 Média |
 | 1-18 | Implementar controle de preço e % budget no plano de mídia | ✅ Done | ⚠️ Alta |
+| 1-19 | Tornar filtros do dashboard dinâmicos via dados reais e adicionar filtro por solicitante | ✅ Done | ⚠️ Alta |
 
 ## Ordem de Execução Recomendada
 

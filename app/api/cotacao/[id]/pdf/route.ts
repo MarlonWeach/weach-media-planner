@@ -7,10 +7,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, podeAcessarCotacao } from '@/lib/utils/auth';
 import { gerarPDF } from '@/lib/pdf/geradorPDF';
+import { gerarBriefingPDF } from '@/lib/pdf/geradorBriefingPDF';
 import {
   resolveCotacaoEmailRecipients,
   sendCotacaoOperationalEmail,
 } from '@/lib/notifications/cotacaoEmail';
+import { normalizarCidadesParaExibicao } from '@/lib/utils/cidades';
 import path from 'path';
 import fs from 'fs';
 
@@ -22,9 +24,15 @@ interface ObservacaoPayload {
     solicitanteEmail?: string;
     agencia?: string;
     cotacaoProativa?: boolean;
+    observacoesGerais?: string;
   };
   estrategia?: {
     definicaoCampanha?: string[];
+  };
+  cobertura?: {
+    tipoRegiao?: string;
+    estadosSelecionados?: string[];
+    cidades?: string;
   };
 }
 
@@ -86,6 +94,42 @@ function inferirDefinicaoCampanhaPeloMix(mixSugerido: unknown): DefinicaoCampanh
   }
 
   return Array.from(result);
+}
+
+function extrairObservacoesGeraisTexto(observacoes: string | null): string {
+  if (!observacoes || observacoes.trim() === '') return 'Sem observações.';
+  try {
+    const payload = JSON.parse(observacoes) as ObservacaoPayload;
+    const texto = payload?.solicitacao?.observacoesGerais;
+    if (typeof texto === 'string' && texto.trim() !== '') {
+      return texto.trim();
+    }
+    return 'Sem observações.';
+  } catch {
+    const textoLivre = observacoes.trim();
+    if (textoLivre.startsWith('{') && textoLivre.endsWith('}')) {
+      return 'Sem observações.';
+    }
+    return textoLivre;
+  }
+}
+
+function montarRegiaoExibicao(regiaoTecnica: string, payloadObs: ObservacaoPayload | null): string {
+  const cobertura = payloadObs?.cobertura;
+  if (!cobertura) return regiaoTecnica;
+
+  const tipoRegiao = String(cobertura.tipoRegiao || '').toUpperCase();
+  if (tipoRegiao === 'CIDADES') {
+    const cidades = String(cobertura.cidades || '').trim();
+    return cidades.length > 0 ? normalizarCidadesParaExibicao(cidades) : regiaoTecnica;
+  }
+  if (tipoRegiao === 'ESTADO') {
+    const estados = Array.isArray(cobertura.estadosSelecionados)
+      ? cobertura.estadosSelecionados.filter(Boolean)
+      : [];
+    return estados.length > 0 ? estados.join(', ') : regiaoTecnica;
+  }
+  return regiaoTecnica;
 }
 
 export async function POST(
@@ -157,6 +201,7 @@ export async function POST(
       estimativas.cplEstimado = Number(cotacao.budget) / estimativas.leads;
     }
     const payloadObs = extrairPayloadObservacoes(cotacao.observacoes);
+    const regiaoExibicao = montarRegiaoExibicao(cotacao.regiao, payloadObs);
 
     const dadosPDF = {
       id: cotacao.id,
@@ -201,10 +246,13 @@ export async function POST(
       fs.mkdirSync(pdfDir, { recursive: true });
     }
 
-    const pdfFileName = `cotacao-${cotacaoId}-${Date.now()}.pdf`;
+    const nowTs = Date.now();
+    const pdfFileName = `cotacao-${cotacaoId}-${nowTs}.pdf`;
     const pdfPath = path.join(pdfDir, pdfFileName);
 
     await gerarPDF(dadosPDF, pdfPath);
+    const briefingPdfFileName = `cotacao-briefing-${cotacaoId}-${nowTs}.pdf`;
+    const briefingPdfPath = path.join(pdfDir, briefingPdfFileName);
 
     // Atualiza URL do PDF na cotação
     const pdfUrl = `/pdfs/${pdfFileName}`;
@@ -245,6 +293,26 @@ export async function POST(
           throw new Error('Destinatário principal ausente (EMAIL_COTACAO_TO).');
         }
 
+        await gerarBriefingPDF(
+          {
+            cotacaoId: cotacao.id,
+            clienteNome: cotacao.clienteNome,
+            clienteSegmento: cotacao.clienteSegmento,
+            objetivo: cotacao.objetivo,
+            budget: Number(cotacao.budget),
+            regiao: regiaoExibicao,
+            definicaoCampanha,
+            cotacaoProativa: Boolean(payloadObs?.solicitacao?.cotacaoProativa),
+            solicitanteNome:
+              cotacao.solicitanteNome || payloadObs?.solicitacao?.solicitante || 'Não informado',
+            solicitanteEmail:
+              cotacao.solicitanteEmail || payloadObs?.solicitacao?.solicitanteEmail || 'Não informado',
+            agenciaNome: cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || 'Não informada',
+            observacoesGerais: extrairObservacoesGeraisTexto(cotacao.observacoes),
+          },
+          briefingPdfPath
+        );
+
         await sendCotacaoOperationalEmail(
           {
             cotacaoId: cotacao.id,
@@ -252,7 +320,7 @@ export async function POST(
             clienteSegmento: cotacao.clienteSegmento,
             objetivo: cotacao.objetivo,
             budget: Number(cotacao.budget),
-            regiao: cotacao.regiao,
+            regiao: regiaoExibicao,
             definicaoCampanha,
             solicitanteNome:
               cotacao.solicitanteNome || payloadObs?.solicitacao?.solicitante || undefined,
@@ -266,8 +334,10 @@ export async function POST(
             mix: mixRows,
             precos,
             estimativas,
-            attachmentPath: pdfPath,
-            attachmentFilename: pdfFileName,
+            attachments: [
+              { path: pdfPath, filename: pdfFileName },
+              { path: briefingPdfPath, filename: briefingPdfFileName },
+            ],
           },
           {
             to: recipients.to,
@@ -295,6 +365,10 @@ export async function POST(
             },
             { status: 500 }
           );
+        }
+      } finally {
+        if (fs.existsSync(briefingPdfPath)) {
+          fs.unlinkSync(briefingPdfPath);
         }
       }
     } else if (!recipients.shouldSend) {
