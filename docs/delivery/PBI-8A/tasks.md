@@ -9,9 +9,9 @@
 |----|-----------|--------|------------|
 | 8A-1 | Definir regras de disparo de e-mail por tipo de cotação (performance/programática) | ✅ Done | ⚠️ Alta |
 | 8A-2 | Definir configuração de destinatários (principal, CC interno, solicitante) | ✅ Done | ⚠️ Alta |
-| 8A-3 | Implementar template de e-mail com resumo estruturado do briefing/cotação | 🔄 InProgress | ⚠️ Alta |
+| 8A-3 | Implementar template de e-mail com resumo estruturado do briefing/cotação | ✅ Done | ⚠️ Alta |
 | 8A-4 | Integrar disparo de e-mail ao fluxo de criação/atualização de cotação | ✅ Done | ⚠️ Alta |
-| 8A-5 | Implementar logging e status operacional de envio/análise | 📌 Pendente | ⚠️ Alta |
+| 8A-5 | Implementar logging e status operacional de envio/análise | ✅ Done | ⚠️ Alta |
 | 8A-6 | Expor histórico de envios no painel administrativo | 📌 Pendente | 📌 Média |
 
 ## Ordem Recomendada

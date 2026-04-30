@@ -7,7 +7,7 @@
 
 | ID | Descrição | Status | Prioridade |
 |----|-----------|--------|------------|
-| 8A | Workflow de Cotação por E-mail | 📌 Pendente | ⚠️ Alta |
+| 8A | Workflow de Cotação por E-mail | 🔄 InProgress | ⚠️ Alta |
 | 8B | Base Histórica para IA de Performance | 📌 Pendente | ⚠️ Alta |
 
 ## Ordem Recomendada

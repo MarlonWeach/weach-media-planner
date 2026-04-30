@@ -1,7 +1,7 @@
 # Task 8A-3: Implementar template de e-mail com resumo estruturado do briefing/cotação
 
 ## Status
-🔄 InProgress
+✅ Done
 
 ## Descrição
 Implementar template de e-mail com leitura rápida, no formato de tabela de campos e valores, inspirado no padrão operacional atual recebido por Google Form Notifications.
@@ -16,10 +16,10 @@ Padronizar apresentação das informações da cotação no e-mail para acelerar
 - Inclusão dos campos essenciais de briefing e metadados da cotação.
 
 ## Critérios de Aceite
-- [ ] E-mail com estrutura visual tabular implementada.
-- [ ] Assunto identifica o tipo de cotação e ID.
-- [ ] Versão `text/plain` mantém informações principais.
-- [ ] Conteúdo seguro com escape de HTML em valores dinâmicos.
+- [x] E-mail com estrutura visual tabular implementada.
+- [x] Assunto identifica o tipo de cotação e ID.
+- [x] Versão `text/plain` mantém informações principais.
+- [x] Conteúdo seguro com escape de HTML em valores dinâmicos.
 
 ## Dependências
 - `8A-1` concluída.
