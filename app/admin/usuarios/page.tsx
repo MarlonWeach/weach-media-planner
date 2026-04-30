@@ -197,6 +197,8 @@ export default function AdminUsuariosPage() {
           <h2 className="text-xl font-semibold">Criar usuário por solicitante</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <select
+              id="novo-solicitante-id"
+              name="novoSolicitanteId"
               value={novoSolicitanteId}
               onChange={(e) => setNovoSolicitanteId(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
@@ -209,6 +211,8 @@ export default function AdminUsuariosPage() {
               ))}
             </select>
             <select
+              id="novo-role"
+              name="novoRole"
               value={novoRole}
               onChange={(e) => setNovoRole(e.target.value as RoleUI)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
@@ -219,11 +223,14 @@ export default function AdminUsuariosPage() {
             </select>
             <div className="relative">
               <input
+                id="nova-senha"
+                name="novaSenha"
                 type={mostrarSenha ? 'text' : 'password'}
                 value={novaSenha}
                 onChange={(e) => setNovaSenha(e.target.value)}
                 className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg"
                 placeholder="Senha inicial"
+                autoComplete="new-password"
               />
               <button
                 type="button"
@@ -245,6 +252,8 @@ export default function AdminUsuariosPage() {
           <h2 className="text-xl font-semibold">Usuários</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
+              id="filtro-busca-usuarios"
+              name="filtroBuscaUsuarios"
               type="text"
               value={filtroBusca}
               onChange={(e) => setFiltroBusca(e.target.value)}
@@ -252,6 +261,8 @@ export default function AdminUsuariosPage() {
               placeholder="Buscar por nome ou email"
             />
             <select
+              id="filtro-role-usuarios"
+              name="filtroRoleUsuarios"
               value={filtroRole}
               onChange={(e) => setFiltroRole(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
@@ -274,6 +285,8 @@ export default function AdminUsuariosPage() {
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <select
+                      id={`usuario-role-${item.id}`}
+                      name={`usuarioRole-${item.id}`}
                       value={item.role}
                       onChange={(e) => {
                         const role = e.target.value as RoleUI;

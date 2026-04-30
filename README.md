@@ -41,7 +41,7 @@ npm install
 
 3. Configure as variáveis de ambiente:
 ```bash
-cp .env.example .env
+touch .env
 ```
 
 Edite o arquivo `.env` com suas credenciais:
