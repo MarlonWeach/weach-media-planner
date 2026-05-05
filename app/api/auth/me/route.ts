@@ -8,6 +8,8 @@ import { prisma } from '@/lib/prisma';
 import { extractTokenFromHeader, verifyToken } from '@/lib/auth/session';
 import { mapDbRoleToUi } from '@/lib/utils/roles';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');

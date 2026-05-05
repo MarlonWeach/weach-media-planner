@@ -3,6 +3,8 @@ import { Role, StatusCotacao } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, usuarioTemRole } from '@/lib/utils/auth';
 
+export const dynamic = 'force-dynamic';
+
 const STATUS_ENVIO = [
   StatusCotacao.ENVIADA,
   StatusCotacao.APROVADA,

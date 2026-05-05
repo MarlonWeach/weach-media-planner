@@ -11,6 +11,8 @@ import { obterUsuarioDoRequest } from '@/lib/utils/auth';
 import { Role } from '@prisma/client';
 import { registrarLogAlteracaoPreco } from '@/lib/pricing/auditoriaPreco';
 
+export const dynamic = 'force-dynamic';
+
 const schemaAtualizarCpm = z.object({
   valor: z.number().positive('CPM base deve ser maior que zero'),
 });
