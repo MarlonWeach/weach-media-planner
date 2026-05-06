@@ -162,6 +162,32 @@ export function WizardStep1({
           setValue('agenciaId', undefined as any, { shouldValidate: false });
           setValue('agenciaNome', '');
         }
+
+        // Task 2-16: pré-seleciona solicitante do usuário logado para nova cotação,
+        // mantendo o campo editável para trocar manualmente quando necessário.
+        if (!solicitanteAtual && token) {
+          const meResponse = await fetch('/api/auth/me', { headers });
+          if (meResponse.ok) {
+            const meData = await meResponse.json();
+            const emailLogado = String(meData?.usuario?.email || '')
+              .trim()
+              .toLowerCase();
+            if (emailLogado) {
+              const solicitanteDoUsuario = solicitantesCarregados.find(
+                (item: { id: string; nome: string; email: string }) =>
+                  String(item.email || '').trim().toLowerCase() === emailLogado
+              );
+              if (solicitanteDoUsuario) {
+                setValue('solicitanteId', solicitanteDoUsuario.id, {
+                  shouldValidate: true,
+                  shouldDirty: false,
+                });
+                setValue('solicitanteNome', solicitanteDoUsuario.nome);
+                setValue('solicitanteEmail', solicitanteDoUsuario.email);
+              }
+            }
+          }
+        }
       } catch (error) {
         console.error('Erro ao carregar listas do formulário:', error);
       }

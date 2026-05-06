@@ -17,6 +17,7 @@ import {
 import { normalizarCidadesParaExibicao } from '@/lib/utils/cidades';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
 type DefinicaoCampanha = 'PERFORMANCE' | 'PROGRAMATICA' | 'WHATSAPP_SMS_PUSH';
 
@@ -38,6 +39,20 @@ interface ObservacaoPayload {
   };
   workflowPerformance?: {
     queueEmailMessageId?: string;
+  };
+}
+
+function serializarErro(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause ? String(error.cause) : undefined,
+    };
+  }
+  return {
+    message: String(error),
   };
 }
 
@@ -298,10 +313,12 @@ export async function POST(
     );
 
     // Gera o PDF
-    const pdfDir = path.join(process.cwd(), 'public', 'pdfs');
-    if (!fs.existsSync(pdfDir)) {
-      fs.mkdirSync(pdfDir, { recursive: true });
+    const attachmentDir = path.join(os.tmpdir(), 'weach-media-planner-pdfs');
+    if (!fs.existsSync(attachmentDir)) {
+      fs.mkdirSync(attachmentDir, { recursive: true });
     }
+    const publicPdfDir = path.join(process.cwd(), 'public', 'pdfs');
+    const podePersistirPdfPublico = !process.env.VERCEL;
 
     const nowTs = Date.now();
     let pdfFileName = '';
@@ -310,13 +327,20 @@ export async function POST(
 
     if (!isPerformance) {
       pdfFileName = `cotacao-${cotacaoId}-${nowTs}.pdf`;
-      pdfPath = path.join(pdfDir, pdfFileName);
+      pdfPath = path.join(attachmentDir, pdfFileName);
       await gerarPDF(dadosPDF, pdfPath);
-      pdfUrl = `/pdfs/${pdfFileName}`;
+      if (podePersistirPdfPublico) {
+        if (!fs.existsSync(publicPdfDir)) {
+          fs.mkdirSync(publicPdfDir, { recursive: true });
+        }
+        const publicPdfPath = path.join(publicPdfDir, pdfFileName);
+        fs.copyFileSync(pdfPath, publicPdfPath);
+        pdfUrl = `/pdfs/${pdfFileName}`;
+      }
     }
 
     const briefingPdfFileName = `cotacao-briefing-${cotacaoId}-${nowTs}.pdf`;
-    const briefingPdfPath = path.join(pdfDir, briefingPdfFileName);
+    const briefingPdfPath = path.join(attachmentDir, briefingPdfFileName);
     const statusDestino = isPerformance ? 'AGUARDANDO_APROVACAO' : 'ENVIADA';
     if (!statusJaProcessado) {
       await prisma.$transaction([
@@ -449,7 +473,10 @@ export async function POST(
         }
       }
     } catch (emailError) {
-      console.error('[CotacaoEmail][erro]', JSON.stringify({ cotacaoId, emailError }));
+      console.error(
+        '[CotacaoEmail][erro]',
+        JSON.stringify({ cotacaoId, erro: serializarErro(emailError) })
+      );
       return NextResponse.json(
         {
           success: false,
@@ -463,6 +490,9 @@ export async function POST(
     } finally {
       if (fs.existsSync(briefingPdfPath)) {
         fs.unlinkSync(briefingPdfPath);
+      }
+      if (pdfPath && fs.existsSync(pdfPath)) {
+        fs.unlinkSync(pdfPath);
       }
     }
 
