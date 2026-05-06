@@ -11,7 +11,7 @@ export async function POST(
 ) {
   try {
     const usuario = obterUsuarioDoRequest(request.headers);
-    if (!usuario || ![Role.ADMIN, Role.EXTERNO].includes(usuario.role)) {
+    if (!usuario || (usuario.role !== Role.ADMIN && usuario.role !== Role.EXTERNO)) {
       return NextResponse.json(
         { success: false, error: 'Acesso negado. Apenas administradores e managers.' },
         { status: 403 }
