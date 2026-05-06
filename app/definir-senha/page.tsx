@@ -1,9 +1,10 @@
 'use client';
 
+import { Suspense } from 'react';
 import { FormEvent, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function DefinirSenhaPage() {
+function DefinirSenhaForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get('token') || '';
@@ -99,6 +100,23 @@ export default function DefinirSenhaPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function DefinirSenhaPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+            <p className="text-gray-600">Carregando...</p>
+          </div>
+        </div>
+      }
+    >
+      <DefinirSenhaForm />
+    </Suspense>
   );
 }
 

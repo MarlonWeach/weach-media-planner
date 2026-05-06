@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, usuarioTemRole } from '@/lib/utils/auth';
 import { extrairHistoricoPerformance } from '@/lib/performance/historico';
 
+export const dynamic = 'force-dynamic';
+
 function ehCotacaoPerformance(observacoes?: string | null): boolean {
   if (!observacoes) return false;
   try {
