@@ -172,6 +172,12 @@ export async function POST(
   try {
     const cotacaoId = params.id;
     const userId = obterUserIdDoRequest(request.headers);
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Não autenticado' },
+        { status: 401 }
+      );
+    }
 
     // Validação básica do ID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
