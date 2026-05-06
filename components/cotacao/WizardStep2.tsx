@@ -159,10 +159,8 @@ export function WizardStep2({
   const cplExigiuFiltro = watch('cplExigiuFiltro');
   const veiculaOutrasRedes = watch('veiculaOutrasRedes');
   const clienteSugeriuValor = watch('clienteSugeriuValor');
-  const cplExigiuFiltroSelecionado =
-    cplExigiuFiltro === true || cplExigiuFiltro === 'true';
-  const clienteSugeriuValorSelecionado =
-    clienteSugeriuValor === true || clienteSugeriuValor === 'true';
+  const cplExigiuFiltroSelecionado = cplExigiuFiltro === true;
+  const clienteSugeriuValorSelecionado = clienteSugeriuValor === true;
   const objetivoSelecionado = watch('objetivo');
   const podeAvancar = !!objetivoSelecionado && definicaoCampanha.length > 0;
 
