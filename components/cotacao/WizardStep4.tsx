@@ -192,6 +192,9 @@ export function WizardStep4({
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [erroAjuste, setErroAjuste] = useState<string | null>(null);
   const inicializacaoExecutadaRef = useRef(false);
+  const isPerformanceCotacao = Array.isArray(dadosPassos?.step2?.definicaoCampanha)
+    ? dadosPassos.step2.definicaoCampanha.includes('PERFORMANCE')
+    : false;
 
   const obterHeadersAutenticacao = (): HeadersInit | null => {
     const token = localStorage.getItem('auth_token');
@@ -940,7 +943,7 @@ export function WizardStep4({
   const somaPercentualAtual = Number(
     itemsPlano.reduce((acc, item) => acc + item.percentualBudget, 0).toFixed(2)
   );
-  const distribuicaoCompleta = somaPercentualAtual === 100;
+  const distribuicaoCompleta = isPerformanceCotacao ? true : somaPercentualAtual === 100;
 
   const sincronizarAjustesCotacao = async () => {
     if (!cotacaoId) return;
@@ -969,7 +972,7 @@ export function WizardStep4({
 
   const handleGerarPDF = async () => {
     if (!cotacaoId) return;
-    if (!distribuicaoCompleta) {
+    if (!isPerformanceCotacao && !distribuicaoCompleta) {
       alert('A soma de % budget deve ser 100% antes de gerar PDF.');
       return;
     }
@@ -997,6 +1000,12 @@ export function WizardStep4({
         // Abre o PDF em nova aba
         window.open(data.pdfUrl, '_blank');
       }
+      alert(
+        isPerformanceCotacao
+          ? data.message || 'Cotação enviada com sucesso para análise interna.'
+          : 'Cotação enviada com sucesso.'
+      );
+      window.location.href = '/';
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erro ao gerar PDF. Tente novamente.');
     } finally {
@@ -1141,12 +1150,14 @@ export function WizardStep4({
           Resultado e Ajustes
         </h2>
         <p className="text-gray-600">
-          Revise o plano de mídia gerado e faça ajustes se necessário
+          {isPerformanceCotacao
+            ? 'Clique em Enviar Cotação para receber o plano de mídia.'
+            : 'Revise o plano de mídia gerado e faça ajustes se necessário'}
         </p>
       </div>
 
       {/* Estimativas */}
-      {itemsPlano.length > 0 && itemsPlano[0].estimativas && (
+      {!isPerformanceCotacao && itemsPlano.length > 0 && itemsPlano[0].estimativas && (
         <div className="mb-6">
           <EstimativasCard
             estimativas={{
@@ -1172,7 +1183,7 @@ export function WizardStep4({
         </div>
       )}
 
-      {erroAjuste && (
+      {!isPerformanceCotacao && erroAjuste && (
         <AlertBox
           type="error"
           title="Ajuste pendente no plano"
@@ -1181,19 +1192,21 @@ export function WizardStep4({
       )}
 
       {/* Tabela de Preços */}
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Plano de Mídia
-        </h3>
-        <PricingTable
-          items={itemsPlano}
-          budgetTotal={dadosPassos.step3.budget}
-          editable={true}
-          exibirMetricasLeads={exibirMetricasLeads}
-          onPriceChange={handlePriceChange}
-          onBudgetPercentChange={handleBudgetPercentChange}
-        />
-      </div>
+      {!isPerformanceCotacao && (
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Plano de Mídia
+          </h3>
+          <PricingTable
+            items={itemsPlano}
+            budgetTotal={dadosPassos.step3.budget}
+            editable={true}
+            exibirMetricasLeads={exibirMetricasLeads}
+            onPriceChange={handlePriceChange}
+            onBudgetPercentChange={handleBudgetPercentChange}
+          />
+        </div>
+      )}
 
       {/* Botões de ação */}
       <div className="flex flex-col gap-3 pt-6 border-t border-gray-200 sm:flex-row sm:items-center sm:justify-between">

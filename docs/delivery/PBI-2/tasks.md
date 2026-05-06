@@ -19,6 +19,9 @@
 | 2-10 | Corrigir aplicação de regionalização (Nacional x Estado x Cidade) na precificação | ✅ Done | 🚨 Crítica |
 | 2-11 | Validar reconhecimento de cidades e alertar correção quando não identificada | ✅ Done | ⚠️ Alta |
 | 2-12 | Implementar gestão de usuários de acesso integrada ao cadastro base (roles: ADMIN, MANAGER, COMERCIAL) | ✅ Done | 🚨 Crítica |
+| 2-13 | Implementar menu de usuário (ajustes e troca de senha) e reforçar bloqueio de acesso comercial ao /admin | ✅ Done | 🚨 Crítica |
+| 2-14 | Criar onboarding de senha para solicitante via e-mail com link de definição de senha | ✅ Done | 🚨 Crítica |
+| 2-15 | Reenviar convite/reset de senha do solicitante em /admin/cadastros e garantir provisionamento COMERCIAL automático | ✅ Done | 🚨 Crítica |
 
 ## Ordem de Execução Recomendada
 
@@ -30,7 +33,11 @@
 6. **2-10** - Correção de regionalização em produção
 7. **2-11** - Validação assistida de cidade (não reconhecida)
 8. **2-12** - Provisionamento e gestão de usuários (acesso)
+9. **2-13** - Autoatendimento de usuário e hardening de autorização admin
+10. **2-14** - Convite por e-mail e criação de senha de solicitante
+11. **2-15** - Reset de senha por convite e sincronização automática para COMERCIAL
 
 ## Observações
 - A task `2-5` foi absorvida pela `2-4`, pois o painel unificado em `/admin/regras-preco` já contempla regras fixas e condicionais no mesmo fluxo de cadastro/edição.
+- Regra de acesso esperada: `/admin/cadastros` acessível por `ADMIN` e `MANAGER`; `/admin/usuarios` acessível apenas por `ADMIN`.
 

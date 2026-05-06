@@ -13,8 +13,9 @@
 | PBI-6 | Fase 6 - Integrações de Mídia | 📌 Pendente | 📎 Baixa |
 | PBI-7 | Fase 7 - API Pública | 📌 Pendente | 📎 Baixa |
 | PBI-8 | Fase 8 - Precificação de Performance (Guarda-chuva) | 🔄 InProgress | ⚠️ Alta |
-| PBI-8A | Fase 8A - Workflow de Cotação por E-mail | 🔄 InProgress | ⚠️ Alta |
-| PBI-8B | Fase 8B - Base Histórica para IA de Performance | 📌 Pendente | ⚠️ Alta |
+| PBI-8A | Fase 8A - Workflow de Cotação por E-mail | ✅ Done | ⚠️ Alta |
+| PBI-8B | Fase 8B - Base Histórica para IA de Performance | ✅ Done | ⚠️ Alta |
+| PBI-8C | Fase 8C - Operação Interna de Decisão de Performance | 📌 Pendente | ⚠️ Alta |
 
 ## Legenda de Status
 
@@ -43,4 +44,5 @@
 8. **PBI-7** - API Pública
 9. **PBI-8A** - Workflow por E-mail
 10. **PBI-8B** - Base Histórica para IA
+11. **PBI-8C** - Operação Interna de Decisão
 

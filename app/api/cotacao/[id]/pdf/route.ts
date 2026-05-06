@@ -9,7 +9,9 @@ import { obterUserIdDoRequest, podeAcessarCotacao } from '@/lib/utils/auth';
 import { gerarPDF } from '@/lib/pdf/geradorPDF';
 import { gerarBriefingPDF } from '@/lib/pdf/geradorBriefingPDF';
 import {
+  resolveCotacaoInternalRecipients,
   resolveCotacaoEmailRecipients,
+  sendPerformanceQueueNotificationEmail,
   sendCotacaoOperationalEmail,
 } from '@/lib/notifications/cotacaoEmail';
 import { normalizarCidadesParaExibicao } from '@/lib/utils/cidades';
@@ -33,6 +35,9 @@ interface ObservacaoPayload {
     tipoRegiao?: string;
     estadosSelecionados?: string[];
     cidades?: string;
+  };
+  workflowPerformance?: {
+    queueEmailMessageId?: string;
   };
 }
 
@@ -60,6 +65,34 @@ function extrairPayloadObservacoes(observacoes: string | null): ObservacaoPayloa
   } catch {
     return null;
   }
+}
+
+function atualizarObservacoesComQueueMessageId(
+  observacoesAtual: string | null,
+  messageId: string
+): string {
+  let payload: ObservacaoPayload = {};
+  if (observacoesAtual) {
+    try {
+      const parsed = JSON.parse(observacoesAtual) as ObservacaoPayload;
+      if (parsed && typeof parsed === 'object') {
+        payload = parsed;
+      }
+    } catch {
+      payload = {};
+    }
+  }
+  return JSON.stringify(
+    {
+      ...payload,
+      workflowPerformance: {
+        ...(payload.workflowPerformance || {}),
+        queueEmailMessageId: messageId,
+      },
+    },
+    null,
+    2
+  );
 }
 
 function inferirDefinicaoCampanhaPeloMix(mixSugerido: unknown): DefinicaoCampanha[] {
@@ -240,29 +273,6 @@ export async function POST(
       }
     }
 
-    // Gera o PDF
-    const pdfDir = path.join(process.cwd(), 'public', 'pdfs');
-    if (!fs.existsSync(pdfDir)) {
-      fs.mkdirSync(pdfDir, { recursive: true });
-    }
-
-    const nowTs = Date.now();
-    const pdfFileName = `cotacao-${cotacaoId}-${nowTs}.pdf`;
-    const pdfPath = path.join(pdfDir, pdfFileName);
-
-    await gerarPDF(dadosPDF, pdfPath);
-    const briefingPdfFileName = `cotacao-briefing-${cotacaoId}-${nowTs}.pdf`;
-    const briefingPdfPath = path.join(pdfDir, briefingPdfFileName);
-
-    // Atualiza URL do PDF na cotação
-    const pdfUrl = `/pdfs/${pdfFileName}`;
-    await prisma.wp_Cotacao.update({
-      where: { id: cotacaoId },
-      data: { pdfUrl },
-    });
-
-    // Dispara e-mail operacional quando a cotação é efetivamente enviada para análise
-    // (na geração do PDF), evitando disparo no momento de criação de rascunho.
     const definicaoDaObservacao = extrairDefinicaoCampanhaDaObservacao(cotacao.observacoes);
     const definicaoCampanha =
       definicaoDaObservacao.length > 0
@@ -275,118 +285,187 @@ export async function POST(
         JSON.stringify({ cotacaoId, source: 'mixSugerido', definicaoCampanha })
       );
     }
-    const recipients = resolveCotacaoEmailRecipients({
-      definicaoCampanha,
-      solicitanteEmail: cotacao.solicitanteEmail || undefined,
-    });
 
-    if (recipients.warnings.length > 0) {
+    const isPerformance = definicaoCampanha.includes('PERFORMANCE');
+    const statusJaProcessado = ['ENVIADA', 'AGUARDANDO_APROVACAO', 'APROVADA', 'RECUSADA'].includes(
+      String(cotacao.status)
+    );
+
+    // Gera o PDF
+    const pdfDir = path.join(process.cwd(), 'public', 'pdfs');
+    if (!fs.existsSync(pdfDir)) {
+      fs.mkdirSync(pdfDir, { recursive: true });
+    }
+
+    const nowTs = Date.now();
+    let pdfFileName = '';
+    let pdfPath = '';
+    let pdfUrl: string | null = null;
+
+    if (!isPerformance) {
+      pdfFileName = `cotacao-${cotacaoId}-${nowTs}.pdf`;
+      pdfPath = path.join(pdfDir, pdfFileName);
+      await gerarPDF(dadosPDF, pdfPath);
+      pdfUrl = `/pdfs/${pdfFileName}`;
+    }
+
+    const briefingPdfFileName = `cotacao-briefing-${cotacaoId}-${nowTs}.pdf`;
+    const briefingPdfPath = path.join(pdfDir, briefingPdfFileName);
+    const statusDestino = isPerformance ? 'AGUARDANDO_APROVACAO' : 'ENVIADA';
+    if (!statusJaProcessado) {
+      await prisma.$transaction([
+        prisma.wp_Cotacao.update({
+          where: { id: cotacaoId },
+          data: { status: statusDestino as any, ...(pdfUrl ? { pdfUrl } : {}) },
+        }),
+        prisma.wp_LogAlteracaoPreco.create({
+          data: {
+            cotacaoId,
+            usuarioId: userId,
+            campo: 'PERFORMANCE_STATUS_WORKFLOW',
+            valorAnterior: String(cotacao.status),
+            valorNovo: String(statusDestino),
+            motivo: isPerformance
+              ? 'Cotação entrou na fila de decisão interna de performance'
+              : 'Cotação enviada ao solicitante pelo fluxo operacional',
+          },
+        }),
+      ]);
+    } else {
       console.warn(
-        '[CotacaoEmail][warnings]',
-        JSON.stringify({ cotacaoId, warnings: recipients.warnings })
+        '[CotacaoEmail][skip]',
+        JSON.stringify({ cotacaoId, motivo: 'status-ja-processado', definicaoCampanha, status: cotacao.status })
       );
     }
 
-    if (recipients.shouldSend && cotacao.status !== 'ENVIADA') {
-      try {
-        if (recipients.to.length === 0) {
-          throw new Error('Destinatário principal ausente (EMAIL_COTACAO_TO).');
-        }
+    try {
+      await gerarBriefingPDF(
+        {
+          cotacaoId: cotacao.id,
+          clienteNome: cotacao.clienteNome,
+          clienteSegmento: cotacao.clienteSegmento,
+          objetivo: cotacao.objetivo,
+          budget: Number(cotacao.budget),
+          regiao: regiaoExibicao,
+          definicaoCampanha,
+          cotacaoProativa: Boolean(payloadObs?.solicitacao?.cotacaoProativa),
+          solicitanteNome:
+            cotacao.solicitanteNome || payloadObs?.solicitacao?.solicitante || 'Não informado',
+          solicitanteEmail:
+            cotacao.solicitanteEmail || payloadObs?.solicitacao?.solicitanteEmail || 'Não informado',
+          agenciaNome: cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || 'Não informada',
+          observacoesGerais: extrairObservacoesGeraisTexto(cotacao.observacoes),
+        },
+        briefingPdfPath
+      );
 
-        await gerarBriefingPDF(
-          {
-            cotacaoId: cotacao.id,
-            clienteNome: cotacao.clienteNome,
-            clienteSegmento: cotacao.clienteSegmento,
-            objetivo: cotacao.objetivo,
-            budget: Number(cotacao.budget),
-            regiao: regiaoExibicao,
-            definicaoCampanha,
-            cotacaoProativa: Boolean(payloadObs?.solicitacao?.cotacaoProativa),
-            solicitanteNome:
-              cotacao.solicitanteNome || payloadObs?.solicitacao?.solicitante || 'Não informado',
-            solicitanteEmail:
-              cotacao.solicitanteEmail || payloadObs?.solicitacao?.solicitanteEmail || 'Não informado',
-            agenciaNome: cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || 'Não informada',
-            observacoesGerais: extrairObservacoesGeraisTexto(cotacao.observacoes),
-          },
-          briefingPdfPath
-        );
-
-        await sendCotacaoOperationalEmail(
-          {
-            cotacaoId: cotacao.id,
-            clienteNome: cotacao.clienteNome,
-            clienteSegmento: cotacao.clienteSegmento,
-            objetivo: cotacao.objetivo,
-            budget: Number(cotacao.budget),
-            regiao: regiaoExibicao,
-            definicaoCampanha,
-            solicitanteNome:
-              cotacao.solicitanteNome || payloadObs?.solicitacao?.solicitante || undefined,
-            solicitanteEmail:
-              cotacao.solicitanteEmail ||
-              payloadObs?.solicitacao?.solicitanteEmail ||
-              undefined,
-            agenciaNome: cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || undefined,
-            cotacaoProativa: Boolean(payloadObs?.solicitacao?.cotacaoProativa),
-            observacoes: cotacao.observacoes || undefined,
-            mix: mixRows,
-            precos,
-            estimativas,
-            attachments: [
+      const emailPayload = {
+        cotacaoId: cotacao.id,
+        clienteNome: cotacao.clienteNome,
+        clienteSegmento: cotacao.clienteSegmento,
+        objetivo: cotacao.objetivo,
+        budget: Number(cotacao.budget),
+        regiao: regiaoExibicao,
+        definicaoCampanha,
+        solicitanteNome:
+          cotacao.solicitanteNome || payloadObs?.solicitacao?.solicitante || undefined,
+        solicitanteEmail:
+          cotacao.solicitanteEmail ||
+          payloadObs?.solicitacao?.solicitanteEmail ||
+          undefined,
+        agenciaNome: cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || undefined,
+        cotacaoProativa: Boolean(payloadObs?.solicitacao?.cotacaoProativa),
+        observacoes: cotacao.observacoes || undefined,
+        mix: mixRows,
+        precos,
+        estimativas,
+        attachments: isPerformance
+          ? [{ path: briefingPdfPath, filename: briefingPdfFileName }]
+          : [
               { path: pdfPath, filename: pdfFileName },
               { path: briefingPdfPath, filename: briefingPdfFileName },
             ],
-          },
-          {
-            to: recipients.to,
-            cc: recipients.cc,
-          }
-        );
+      };
 
-        await prisma.wp_Cotacao.update({
-          where: { id: cotacaoId },
-          data: { status: 'ENVIADA' },
+      if (isPerformance) {
+        const recipients = resolveCotacaoInternalRecipients({
+          solicitanteEmail: cotacao.solicitanteEmail || payloadObs?.solicitacao?.solicitanteEmail || undefined,
         });
-      } catch (emailError) {
-        console.error(
-          '[CotacaoEmail][erro]',
-          JSON.stringify({ cotacaoId, required: recipients.required, emailError })
-        );
-        if (recipients.required) {
-          return NextResponse.json(
-            {
-              success: false,
-              error:
-                'PDF gerado, mas o envio de e-mail obrigatório para análise de performance falhou. Revise configuração SMTP/destinatários.',
-              cotacaoId,
-              pdfUrl,
-            },
-            { status: 500 }
+        if (recipients.warnings.length > 0) {
+          console.warn(
+            '[CotacaoEmail][warnings]',
+            JSON.stringify({ cotacaoId, warnings: recipients.warnings })
           );
         }
-      } finally {
-        if (fs.existsSync(briefingPdfPath)) {
-          fs.unlinkSync(briefingPdfPath);
+        if (recipients.to.length === 0) {
+          throw new Error('Destinatário principal ausente (EMAIL_COTACAO_TO) para notificação interna.');
+        }
+        const queueEmailInfo = await sendPerformanceQueueNotificationEmail(emailPayload, {
+          to: recipients.to,
+          cc: recipients.cc,
+        });
+        if (queueEmailInfo.messageId) {
+          await prisma.wp_Cotacao.update({
+            where: { id: cotacaoId },
+            data: {
+              observacoes: atualizarObservacoesComQueueMessageId(
+                cotacao.observacoes,
+                queueEmailInfo.messageId
+              ),
+            },
+          });
+        }
+      } else {
+        const recipients = resolveCotacaoEmailRecipients({
+          definicaoCampanha,
+          solicitanteEmail: cotacao.solicitanteEmail || undefined,
+        });
+        if (recipients.warnings.length > 0) {
+          console.warn(
+            '[CotacaoEmail][warnings]',
+            JSON.stringify({ cotacaoId, warnings: recipients.warnings })
+          );
+        }
+
+        if (recipients.shouldSend) {
+          if (recipients.to.length === 0) {
+            throw new Error('Destinatário principal ausente (EMAIL_COTACAO_TO).');
+          }
+          await sendCotacaoOperationalEmail(emailPayload, {
+            to: recipients.to,
+            cc: recipients.cc,
+          });
+        } else {
+          console.warn(
+            '[CotacaoEmail][skip]',
+            JSON.stringify({ cotacaoId, motivo: 'regra', definicaoCampanha, status: cotacao.status })
+          );
         }
       }
-    } else if (!recipients.shouldSend) {
-      console.warn(
-        '[CotacaoEmail][skip]',
-        JSON.stringify({ cotacaoId, motivo: 'regra', definicaoCampanha, status: cotacao.status })
+    } catch (emailError) {
+      console.error('[CotacaoEmail][erro]', JSON.stringify({ cotacaoId, emailError }));
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Envio de e-mail falhou. Revise configuração SMTP/destinatários.',
+          cotacaoId,
+          pdfUrl,
+        },
+        { status: 500 }
       );
-    } else if (cotacao.status === 'ENVIADA') {
-      console.warn(
-        '[CotacaoEmail][skip]',
-        JSON.stringify({ cotacaoId, motivo: 'status-ja-enviada', definicaoCampanha })
-      );
+    } finally {
+      if (fs.existsSync(briefingPdfPath)) {
+        fs.unlinkSync(briefingPdfPath);
+      }
     }
 
     return NextResponse.json({
       success: true,
       pdfUrl,
-      message: 'PDF gerado com sucesso',
+      message: isPerformance
+        ? 'Cotação de performance enviada para fila de aprovação interna.'
+        : 'PDF gerado com sucesso',
     });
   } catch (error) {
     console.error('Erro ao gerar PDF:', error);

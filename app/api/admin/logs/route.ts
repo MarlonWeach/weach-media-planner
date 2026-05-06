@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
 
     const usuarioId = params.get('usuarioId');
     const campo = params.get('campo');
+    const cotacaoId = params.get('cotacaoId');
     const dataInicio = parseDateBoundary(params.get('dataInicio'), false);
     const dataFim = parseDateBoundary(params.get('dataFim'), true);
 
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
 
     if (usuarioId) where.usuarioId = usuarioId;
     if (campo) where.campo = campo;
+    if (cotacaoId) where.cotacaoId = cotacaoId;
 
     if (dataInicio || dataFim) {
       where.createdAt = {};

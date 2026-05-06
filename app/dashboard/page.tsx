@@ -10,11 +10,12 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { CotacaoList } from '@/components/dashboard/CotacaoList';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { UserMenu } from '@/components/layout/UserMenu';
 import Link from 'next/link';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { usuario, isAuthenticated, loading, logout } = useAuth();
+  const { usuario, isAuthenticated, loading } = useAuth();
 
   // Redireciona se não estiver autenticado
   useEffect(() => {
@@ -66,12 +67,7 @@ export default function DashboardPage() {
                 Admin
               </Link>
             )}
-            <button
-              onClick={logout}
-              className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              Sair
-            </button>
+            <UserMenu />
           </div>
         </div>
 

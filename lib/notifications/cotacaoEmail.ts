@@ -15,6 +15,18 @@ interface RecipientResolutionResult {
   warnings: string[];
 }
 
+interface InternalRecipientResolutionResult {
+  to: string[];
+  cc: string[];
+  warnings: string[];
+}
+
+interface FinalDecisionRecipientResolutionResult {
+  to: string[];
+  cc: string[];
+  warnings: string[];
+}
+
 interface SendCotacaoEmailInput {
   cotacaoId: string;
   clienteNome: string;
@@ -127,6 +139,72 @@ export function resolveCotacaoEmailRecipients(
   }
 
   return { shouldSend, required, to, cc, warnings };
+}
+
+export function resolveCotacaoInternalRecipients(input?: {
+  solicitanteEmail?: string;
+}): InternalRecipientResolutionResult {
+  const warnings: string[] = [];
+  const toBase = parseEmailsFromEnv(process.env.EMAIL_COTACAO_TO);
+  const ccBase = parseEmailsFromEnv(process.env.EMAIL_COTACAO_CC);
+  const ccPerf = parseEmailsFromEnv(process.env.EMAIL_COTACAO_CC_PERFORMANCE);
+  const ccProg = parseEmailsFromEnv(process.env.EMAIL_COTACAO_CC_PROGRAMATICA);
+
+  const to = normalizeUniqueEmails(toBase);
+  let cc = normalizeUniqueEmails([...ccBase, ...ccPerf, ...ccProg]).filter(
+    (email) => !to.includes(email)
+  );
+
+  const includeSolicitante = isTruthy(
+    process.env.EMAIL_COTACAO_INCLUDE_SOLICITANTE,
+    true
+  );
+  const solicitante = input?.solicitanteEmail?.trim().toLowerCase();
+  if (includeSolicitante) {
+    if (solicitante && solicitante.includes('@')) {
+      cc = normalizeUniqueEmails([...cc, solicitante]).filter((email) => !to.includes(email));
+    } else if (input?.solicitanteEmail) {
+      warnings.push('Solicitante com e-mail inválido não foi incluído no envio.');
+    }
+  }
+
+  if (to.length === 0) {
+    warnings.push('EMAIL_COTACAO_TO não configurado para notificação interna.');
+  }
+
+  return { to, cc, warnings };
+}
+
+export function resolveCotacaoFinalDecisionRecipients(input: {
+  solicitanteEmail?: string;
+  definicaoCampanha: DefinicaoCampanha[];
+}): FinalDecisionRecipientResolutionResult {
+  const warnings: string[] = [];
+  const solicitante = (input.solicitanteEmail || '').trim().toLowerCase();
+  const to = solicitante && solicitante.includes('@') ? [solicitante] : [];
+
+  if (to.length === 0) {
+    warnings.push('Solicitante sem e-mail válido para envio final.');
+  }
+
+  const hasPerformance = input.definicaoCampanha.includes('PERFORMANCE');
+  const hasProgramaticaOuMensageria =
+    input.definicaoCampanha.includes('PROGRAMATICA') ||
+    input.definicaoCampanha.includes('WHATSAPP_SMS_PUSH');
+
+  const ccBase = parseEmailsFromEnv(process.env.EMAIL_COTACAO_CC);
+  const ccPerf = hasPerformance
+    ? parseEmailsFromEnv(process.env.EMAIL_COTACAO_CC_PERFORMANCE)
+    : [];
+  const ccProg = hasProgramaticaOuMensageria
+    ? parseEmailsFromEnv(process.env.EMAIL_COTACAO_CC_PROGRAMATICA)
+    : [];
+
+  const cc = normalizeUniqueEmails([...ccBase, ...ccPerf, ...ccProg]).filter(
+    (email) => !to.includes(email)
+  );
+
+  return { to, cc, warnings };
 }
 
 function buildEmailBody(input: SendCotacaoEmailInput): string {
@@ -307,6 +385,153 @@ function extrairObservacoesGerais(observacoes?: string): string {
     return 'Sem observações.';
   }
   return observacoes;
+}
+
+function extrairBriefingLinhas(observacoes?: string): Array<{ label: string; value: string }> {
+  if (!observacoes) return [];
+  try {
+    const payload = JSON.parse(observacoes) as {
+      solicitacao?: {
+        solicitante?: string;
+        solicitanteEmail?: string;
+        agencia?: string;
+        cotacaoProativa?: boolean;
+        observacoesGerais?: string;
+      };
+      estrategia?: {
+        objetivo?: string;
+        definicaoCampanha?: string[];
+        performance?: {
+          modelos?: string[];
+          cplCamposCadastro?: string;
+          cplExigiuFiltro?: boolean;
+          cplQualFiltro?: string;
+          cplConversaoLeadCompleta?: string;
+          veiculaOutrasRedes?: string;
+          veiculaQuaisRedes?: string;
+          clienteSugeriuValor?: boolean;
+          clienteValorSugerido?: string;
+        };
+      };
+      cobertura?: {
+        tipoRegiao?: string;
+        estadosSelecionados?: string[];
+        cidades?: string;
+      };
+    };
+
+    return [
+      { label: 'Solicitante', value: String(payload?.solicitacao?.solicitante || 'Não informado') },
+      {
+        label: 'E-mail do solicitante',
+        value: String(payload?.solicitacao?.solicitanteEmail || 'Não informado'),
+      },
+      { label: 'Agência', value: String(payload?.solicitacao?.agencia || 'Não informada') },
+      {
+        label: 'Cotação pró-ativa',
+        value: payload?.solicitacao?.cotacaoProativa ? 'Sim' : 'Não',
+      },
+      {
+        label: 'Observações gerais',
+        value: String(payload?.solicitacao?.observacoesGerais || 'Sem observações'),
+      },
+      {
+        label: 'Definição de campanha',
+        value: Array.isArray(payload?.estrategia?.definicaoCampanha)
+          ? payload!.estrategia!.definicaoCampanha!.join(', ')
+          : 'Não informada',
+      },
+      {
+        label: 'Modelos performance',
+        value: Array.isArray(payload?.estrategia?.performance?.modelos)
+          ? payload!.estrategia!.performance!.modelos!.join(', ')
+          : 'Não informado',
+      },
+      {
+        label: 'Campos de cadastro',
+        value: String(payload?.estrategia?.performance?.cplCamposCadastro || 'Não informado'),
+      },
+      {
+        label: 'Filtro exigido',
+        value: String(payload?.estrategia?.performance?.cplQualFiltro || 'Não informado'),
+      },
+      {
+        label: 'Exigiu filtro',
+        value:
+          payload?.estrategia?.performance?.cplExigiuFiltro === undefined
+            ? 'Não informado'
+            : payload.estrategia.performance.cplExigiuFiltro
+              ? 'Sim'
+              : 'Não',
+      },
+      {
+        label: 'Conversão completa',
+        value: String(payload?.estrategia?.performance?.cplConversaoLeadCompleta || 'Não informado'),
+      },
+      {
+        label: 'Cliente veicula em outras redes',
+        value: String(payload?.estrategia?.performance?.veiculaOutrasRedes || 'Não informado'),
+      },
+      {
+        label: 'Outras redes',
+        value: String(payload?.estrategia?.performance?.veiculaQuaisRedes || 'Não informado'),
+      },
+      {
+        label: 'Cliente sugeriu valor',
+        value:
+          payload?.estrategia?.performance?.clienteSugeriuValor === undefined
+            ? 'Não informado'
+            : payload.estrategia.performance.clienteSugeriuValor
+              ? 'Sim'
+              : 'Não',
+      },
+      {
+        label: 'Valor sugerido cliente',
+        value: String(payload?.estrategia?.performance?.clienteValorSugerido || 'Não informado'),
+      },
+      { label: 'Tipo de região', value: String(payload?.cobertura?.tipoRegiao || 'NACIONAL') },
+      {
+        label: 'Estados',
+        value: Array.isArray(payload?.cobertura?.estadosSelecionados)
+          ? payload!.cobertura!.estadosSelecionados!.join(', ') || 'Não informado'
+          : 'Não informado',
+      },
+      { label: 'Cidades', value: String(payload?.cobertura?.cidades || 'Não informado') },
+    ];
+  } catch {
+    return [];
+  }
+}
+
+function extrairResumoPrecoFinal(observacoes?: string): string | null {
+  if (!observacoes) return null;
+  try {
+    const payload = JSON.parse(observacoes) as {
+      historicoPerformance?: {
+        registros?: Array<{ precoFinalAplicado?: number; formato?: string; modeloCompra?: string }>;
+      };
+    };
+    const registros = Array.isArray(payload?.historicoPerformance?.registros)
+      ? payload.historicoPerformance!.registros!
+      : [];
+    const validos = registros
+      .map((item) => ({
+        modelo: String(item.modeloCompra || '').trim().toUpperCase(),
+        preco: Number(item.precoFinalAplicado),
+      }))
+      .filter((item) => Number.isFinite(item.preco) && item.preco > 0);
+    if (validos.length === 0) return null;
+    if (validos.length === 1) {
+      return `${validos[0].modelo || 'PRECO'} ${formatCurrency(validos[0].preco)}`;
+    }
+    const modelos = Array.from(new Set(validos.map((item) => item.modelo).filter(Boolean)));
+    if (modelos.length === 1) {
+      return `${modelos[0]} (${validos.length} formatos)`;
+    }
+    return `${validos.length} formatos com preço final definido`;
+  } catch {
+    return null;
+  }
 }
 
 function formatCurrency(value: number, casasDecimais = 2): string {
@@ -491,5 +716,212 @@ export async function sendCotacaoOperationalEmail(
         : input.attachmentPath && input.attachmentFilename
           ? [{ filename: input.attachmentFilename, path: input.attachmentPath }]
           : undefined,
+  });
+}
+
+export async function sendPerformanceQueueNotificationEmail(
+  input: SendCotacaoEmailInput,
+  recipients: { to: string[]; cc: string[] }
+): Promise<{ messageId?: string }> {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.EMAIL_COTACAO_FROM || process.env.SMTP_FROM || user;
+
+  if (!host || !port || !user || !pass || !from) {
+    throw new Error(
+      'Configuração SMTP incompleta. Defina SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS e EMAIL_COTACAO_FROM/SMTP_FROM.'
+    );
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  });
+
+  const briefingLinhas = extrairBriefingLinhas(input.observacoes);
+  const assunto = `Cotação - ${input.clienteNome} (${input.cotacaoId})`;
+  const corpoTexto = [
+    'Nova cotação de PERFORMANCE entrou na fila interna para decisão.',
+    '',
+    `ID: ${input.cotacaoId}`,
+    `Cliente: ${input.clienteNome}`,
+    `Segmento: ${input.clienteSegmento}`,
+    `Objetivo: ${input.objetivo}`,
+    `Budget: R$ ${input.budget.toLocaleString('pt-BR')}`,
+    `Região: ${input.regiao}`,
+    `Solicitante: ${input.solicitanteNome || 'Não informado'} (${input.solicitanteEmail || 'Não informado'})`,
+    '',
+    'Briefing preenchido:',
+    ...(briefingLinhas.length > 0
+      ? briefingLinhas.map((row) => `- ${row.label}: ${row.value}`)
+      : ['- Sem detalhes estruturados disponíveis']),
+    '',
+    `Link interno: ${process.env.NEXT_PUBLIC_APP_URL || ''}/admin/performance-fila/${input.cotacaoId}`,
+    '',
+    'A decisão final deve ser registrada no sistema.',
+  ].join('\n');
+
+  const corpoHtml = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.5;">
+      <h2 style="margin:0 0 8px 0;">Nova cotação de performance na fila</h2>
+      <p style="margin:0 0 12px 0;color:#4b5563;">
+        A cotação <strong>${escapeHtml(input.cotacaoId)}</strong> entrou em <strong>AGUARDANDO_APROVACAO</strong>.
+      </p>
+      <table style="border-collapse:collapse;width:100%;max-width:900px;">
+        <tbody>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Cliente</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(input.clienteNome)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Segmento</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(input.clienteSegmento)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Objetivo</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(input.objetivo)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Budget</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(`R$ ${input.budget.toLocaleString('pt-BR')}`)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Região</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(input.regiao)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Solicitante</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(input.solicitanteNome || 'Não informado')} (${escapeHtml(input.solicitanteEmail || 'Não informado')})</td></tr>
+        </tbody>
+      </table>
+      <h3 style="margin:14px 0 8px 0;color:#1f2937;">Briefing preenchido</h3>
+      <table style="border-collapse:collapse;width:100%;max-width:980px;">
+        <tbody>
+          ${(briefingLinhas.length > 0
+            ? briefingLinhas
+            : [{ label: 'Briefing', value: 'Sem detalhes estruturados disponíveis.' }]
+          )
+            .map(
+              (row) => `
+                <tr>
+                  <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;width:260px;">${escapeHtml(row.label)}</td>
+                  <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(row.value)}</td>
+                </tr>
+              `
+            )
+            .join('')}
+        </tbody>
+      </table>
+      <p style="margin-top:14px;">
+        <a href="${escapeHtml(`${process.env.NEXT_PUBLIC_APP_URL || ''}/admin/performance-fila/${input.cotacaoId}`)}">Abrir decisão no sistema</a>
+      </p>
+    </div>
+  `;
+
+  const info = await transporter.sendMail({
+    from,
+    to: recipients.to.join(', '),
+    cc: recipients.cc.length > 0 ? recipients.cc.join(', ') : undefined,
+    subject: assunto,
+    text: corpoTexto,
+    html: corpoHtml,
+  });
+  return { messageId: info.messageId };
+}
+
+export async function sendPerformanceFinalDecisionEmail(
+  input: SendCotacaoEmailInput & {
+    decisaoStatus: 'APROVADA' | 'RECUSADA';
+    decisaoComentario?: string;
+    replyToMessageId?: string;
+  },
+  recipients: { to: string[]; cc: string[] }
+): Promise<void> {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.EMAIL_COTACAO_FROM || process.env.SMTP_FROM || user;
+
+  if (!host || !port || !user || !pass || !from) {
+    throw new Error(
+      'Configuração SMTP incompleta. Defina SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS e EMAIL_COTACAO_FROM/SMTP_FROM.'
+    );
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  });
+
+  const statusLabel = input.decisaoStatus === 'APROVADA' ? 'Aprovada' : 'Recusada';
+  const comentario = (input.decisaoComentario || '').trim();
+  const precoFinalResumo = extrairResumoPrecoFinal(input.observacoes) || 'Conforme validação interna';
+  const assunto = `Cotação - ${input.clienteNome} (${input.cotacaoId})`;
+  const divider = '------------------------------------------------------------';
+  const briefingLinhas = extrairBriefingLinhas(input.observacoes);
+  const corpoTexto = [
+    `Olá, tudo bem?`,
+    '',
+    `Status: ${statusLabel}`,
+    `Preço final: ${precoFinalResumo}`,
+    ...(comentario ? [`Observação: ${comentario}`] : []),
+    '',
+    divider,
+    'Briefing preenchido:',
+    `Cliente: ${input.clienteNome}`,
+    `Agência: ${input.agenciaNome || 'Não informada'}`,
+    ...briefingLinhas.map((row) => `${row.label}: ${row.value}`),
+    '',
+    'Atenciosamente,',
+    'Equipe Weach',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const corpoHtml = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.5;">
+      <h2 style="margin:0 0 10px 0;">Resposta Cotação - ${escapeHtml(input.clienteNome)}</h2>
+      <p style="margin:0 0 12px 0;color:#4b5563;">
+        ID <strong>${escapeHtml(input.cotacaoId)}</strong> | Status <strong>${escapeHtml(statusLabel)}</strong>
+      </p>
+      <table style="border-collapse:collapse;width:100%;max-width:900px;">
+        <tbody>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Preço final</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(precoFinalResumo)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Cliente</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(input.clienteNome)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Agência</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(input.agenciaNome || 'Não informada')}</td></tr>
+          ${
+            comentario
+              ? `<tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Observação</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(
+                  comentario
+                )}</td></tr>`
+              : ''
+          }
+        </tbody>
+      </table>
+      <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb;" />
+      <h3 style="margin:0 0 8px 0;">Briefing preenchido</h3>
+      <table style="border-collapse:collapse;width:100%;max-width:980px;">
+        <tbody>
+          ${(briefingLinhas.length > 0
+            ? briefingLinhas
+            : [{ label: 'Briefing', value: 'Sem detalhes estruturados disponíveis.' }]
+          )
+            .map(
+              (row) => `
+                <tr>
+                  <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;width:260px;">${escapeHtml(row.label)}</td>
+                  <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(row.value)}</td>
+                </tr>
+              `
+            )
+            .join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to: recipients.to.join(', '),
+    cc: recipients.cc.length > 0 ? recipients.cc.join(', ') : undefined,
+    subject: assunto,
+    inReplyTo: input.replyToMessageId || undefined,
+    references: input.replyToMessageId || undefined,
+    text: corpoTexto,
+    html: corpoHtml,
+    attachments:
+      input.attachments && input.attachments.length > 0
+        ? input.attachments.map((item) => ({ filename: item.filename, path: item.path }))
+        : undefined,
   });
 }

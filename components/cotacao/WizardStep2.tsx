@@ -159,6 +159,10 @@ export function WizardStep2({
   const cplExigiuFiltro = watch('cplExigiuFiltro');
   const veiculaOutrasRedes = watch('veiculaOutrasRedes');
   const clienteSugeriuValor = watch('clienteSugeriuValor');
+  const cplExigiuFiltroSelecionado =
+    cplExigiuFiltro === true || cplExigiuFiltro === 'true';
+  const clienteSugeriuValorSelecionado =
+    clienteSugeriuValor === true || clienteSugeriuValor === 'true';
   const objetivoSelecionado = watch('objetivo');
   const podeAvancar = !!objetivoSelecionado && definicaoCampanha.length > 0;
 
@@ -321,7 +325,7 @@ export function WizardStep2({
                 </div>
               </FormField>
 
-              {cplExigiuFiltro === true && (
+              {cplExigiuFiltroSelecionado && (
                 <FormField label="Qual filtro foi exigido?" name="cplQualFiltro" required>
                   <textarea
                     {...register('cplQualFiltro')}
@@ -381,7 +385,7 @@ export function WizardStep2({
             </div>
           </FormField>
 
-          {clienteSugeriuValor === true && (
+          {clienteSugeriuValorSelecionado && (
             <FormField label="Valor sugerido pelo cliente" name="clienteValorSugerido" required>
               <input
                 type="text"

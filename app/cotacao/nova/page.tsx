@@ -185,12 +185,22 @@ export default function NovaCotacaoPage() {
       <div className="mx-auto w-full max-w-screen-2xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-primary-dark mb-2">
-            Nova Cotação
-          </h1>
-          <p className="text-gray-600">
-            Preencha os dados abaixo para gerar uma cotação completa
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-primary-dark mb-2">
+                Nova Cotação
+              </h1>
+              <p className="text-gray-600">
+                Preencha os dados abaixo para gerar uma cotação completa
+              </p>
+            </div>
+            <a
+              href="/"
+              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Ir para Home
+            </a>
+          </div>
         </div>
 
         {/* Progress Steps */}

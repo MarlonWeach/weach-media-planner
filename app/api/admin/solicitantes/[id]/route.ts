@@ -14,9 +14,9 @@ export async function PATCH(
 ) {
   try {
     const usuario = obterUsuarioDoRequest(request.headers);
-    if (!usuario || usuario.role !== Role.ADMIN) {
+    if (!usuario || ![Role.ADMIN, Role.EXTERNO].includes(usuario.role)) {
       return NextResponse.json(
-        { success: false, error: 'Acesso negado. Apenas administradores.' },
+        { success: false, error: 'Acesso negado. Apenas administradores e managers.' },
         { status: 403 }
       );
     }

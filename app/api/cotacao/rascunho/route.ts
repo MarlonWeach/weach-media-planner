@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
+import { sincronizarHistoricoComMixStep4 } from '@/lib/performance/historico';
 
 const schemaRascunho = z.object({
   cotacaoId: z.string().uuid().optional(),
@@ -142,6 +143,13 @@ export async function POST(request: NextRequest) {
         dadosAtualizacao.mixSugerido = dados.step4.mix;
         dadosAtualizacao.precosSugeridos = dados.step4.precos;
         dadosAtualizacao.estimativas = dados.step4.estimativas;
+        if (Array.isArray(dados.step4.mix)) {
+          dadosAtualizacao.observacoes = sincronizarHistoricoComMixStep4({
+            observacoesAtual: cotacao.observacoes,
+            mix: dados.step4.mix,
+            userId,
+          });
+        }
       }
 
       const cotacaoAtualizada = await prisma.wp_Cotacao.update({

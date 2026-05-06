@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { obterUsuarioDoRequest } from '@/lib/utils/auth';
+import { randomBytes } from 'crypto';
+import { sendSolicitanteOnboardingEmail } from '@/lib/notifications/onboardingEmail';
 
 const schemaCriarSolicitante = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
@@ -12,9 +14,9 @@ const schemaCriarSolicitante = z.object({
 export async function GET(request: NextRequest) {
   try {
     const usuario = obterUsuarioDoRequest(request.headers);
-    if (!usuario || usuario.role !== Role.ADMIN) {
+    if (!usuario || ![Role.ADMIN, Role.EXTERNO].includes(usuario.role)) {
       return NextResponse.json(
-        { success: false, error: 'Acesso negado. Apenas administradores.' },
+        { success: false, error: 'Acesso negado. Apenas administradores e managers.' },
         { status: 403 }
       );
     }
@@ -43,9 +45,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const usuario = obterUsuarioDoRequest(request.headers);
-    if (!usuario || usuario.role !== Role.ADMIN) {
+    if (!usuario || ![Role.ADMIN, Role.EXTERNO].includes(usuario.role)) {
       return NextResponse.json(
-        { success: false, error: 'Acesso negado. Apenas administradores.' },
+        { success: false, error: 'Acesso negado. Apenas administradores e managers.' },
         { status: 403 }
       );
     }
@@ -59,6 +61,27 @@ export async function POST(request: NextRequest) {
         email: dados.email.trim().toLowerCase(),
         ativo: true,
       },
+    });
+
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
+    await prisma.wp_Configuracao.create({
+      data: {
+        chave: `onboarding_solicitante:${token}`,
+        valor: {
+          solicitanteId: solicitante.id,
+          email: solicitante.email,
+          expiresAt: expiresAt.toISOString(),
+          usedAt: null,
+        },
+        descricao: 'Token para definição inicial de senha do solicitante',
+      },
+    });
+
+    await sendSolicitanteOnboardingEmail({
+      to: solicitante.email,
+      nome: solicitante.nome,
+      token,
     });
 
     return NextResponse.json({ success: true, solicitante });

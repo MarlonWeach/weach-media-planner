@@ -19,7 +19,7 @@ interface Agencia {
 
 export default function AdminCadastrosPage() {
   const router = useRouter();
-  const { isAuthenticated, isAdmin, loading: authLoading } = useAuth();
+  const { isAuthenticated, isAdmin, usuario, loading: authLoading } = useAuth();
   const [solicitantes, setSolicitantes] = useState<Solicitante[]>([]);
   const [agencias, setAgencias] = useState<Agencia[]>([]);
   const [novoSolicitanteNome, setNovoSolicitanteNome] = useState('');
@@ -30,16 +30,17 @@ export default function AdminCadastrosPage() {
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    if (!authLoading && (!isAuthenticated || !isAdmin)) {
+    const podeAcessar = isAdmin || usuario?.role === 'MANAGER';
+    if (!authLoading && (!isAuthenticated || !podeAcessar)) {
       router.push('/dashboard');
     }
-  }, [authLoading, isAuthenticated, isAdmin, router]);
+  }, [authLoading, isAuthenticated, isAdmin, router, usuario?.role]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin || usuario?.role === 'MANAGER') {
       carregarDados();
     }
-  }, [isAdmin]);
+  }, [isAdmin, usuario?.role]);
 
   const getAuthHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('auth_token');
@@ -96,7 +97,7 @@ export default function AdminCadastrosPage() {
 
       setNovoSolicitanteNome('');
       setNovoSolicitanteEmail('');
-      setSucesso('Solicitante criado com sucesso.');
+      setSucesso('Solicitante criado com sucesso. Convite para definição de senha enviado por e-mail.');
       await carregarDados();
     } catch (error) {
       setErro(error instanceof Error ? error.message : 'Erro ao criar solicitante');
@@ -154,6 +155,26 @@ export default function AdminCadastrosPage() {
     }
   };
 
+  const reenviarOnboardingSolicitante = async (id: string) => {
+    setErro(null);
+    setSucesso(null);
+    try {
+      const response = await fetch(`/api/admin/solicitantes/${id}/onboarding`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Erro ao enviar convite de senha');
+      }
+      setSucesso('E-mail de criação/reset de senha enviado ao solicitante.');
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : 'Erro ao enviar convite de senha');
+    }
+  };
+
   const atualizarStatusAgencia = async (id: string, ativo: boolean) => {
     setErro(null);
     setSucesso(null);
@@ -190,7 +211,7 @@ export default function AdminCadastrosPage() {
     );
   }
 
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated || (!isAdmin && usuario?.role !== 'MANAGER')) {
     return null;
   }
 
@@ -245,16 +266,24 @@ export default function AdminCadastrosPage() {
                     <p className="font-medium text-gray-900">{item.nome}</p>
                     <p className="text-sm text-gray-600">{item.email}</p>
                   </div>
-                  <button
-                    onClick={() => atualizarStatusSolicitante(item.id, !item.ativo)}
-                    className={`px-3 py-1 text-sm rounded ${
-                      item.ativo
-                        ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                        : 'bg-green-100 text-green-800 hover:bg-green-200'
-                    }`}
-                  >
-                    {item.ativo ? 'Inativar' : 'Ativar'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => void reenviarOnboardingSolicitante(item.id)}
+                      className="px-3 py-1 text-sm rounded bg-blue-100 text-blue-800 hover:bg-blue-200"
+                    >
+                      Reset senha
+                    </button>
+                    <button
+                      onClick={() => atualizarStatusSolicitante(item.id, !item.ativo)}
+                      className={`px-3 py-1 text-sm rounded ${
+                        item.ativo
+                          ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                          : 'bg-green-100 text-green-800 hover:bg-green-200'
+                      }`}
+                    >
+                      {item.ativo ? 'Inativar' : 'Ativar'}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

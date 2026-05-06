@@ -126,6 +126,14 @@ export function CotacaoCard({
       </div>
 
       <div className="flex gap-2 pt-4 border-t border-gray-200">
+        {status === 'AGUARDANDO_APROVACAO' && (
+          <Link
+            href={`/admin/performance-fila/${id}`}
+            className="flex-1 px-4 py-2 text-sm text-center text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Responder
+          </Link>
+        )}
         <Link
           href={`/cotacao/${id}`}
           className="flex-1 px-4 py-2 text-sm text-center text-primary border border-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
@@ -140,37 +148,6 @@ export function CotacaoCard({
             Editar
           </Link>
         )}
-        <button
-          onClick={async () => {
-            try {
-              const token = localStorage.getItem('auth_token');
-              if (!token) {
-                throw new Error('Sessão expirada');
-              }
-
-              const response = await fetch(`/api/cotacao/${id}/pdf`, {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
-              });
-
-              if (!response.ok) {
-                throw new Error('Erro ao gerar PDF');
-              }
-
-              const data = await response.json();
-              if (data.pdfUrl) {
-                window.open(data.pdfUrl, '_blank');
-              }
-            } catch (err) {
-              alert('Erro ao gerar PDF. Tente novamente.');
-            }
-          }}
-          className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          PDF
-        </button>
         {isAdmin && (
           <button
             onClick={async () => {

@@ -9,17 +9,18 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { UserMenu } from '@/components/layout/UserMenu';
 import Link from 'next/link';
 
 export default function AdminPage() {
   const router = useRouter();
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const { isAuthenticated, isAdmin, loading, usuario } = useAuth();
 
   useEffect(() => {
-    if (!loading && (!isAuthenticated || !isAdmin)) {
+    if (!loading && (!isAuthenticated || !isAdmin || usuario?.role === 'COMERCIAL')) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated, isAdmin, loading, router]);
+  }, [isAuthenticated, isAdmin, loading, router, usuario?.role]);
 
   if (loading) {
     return (
@@ -32,7 +33,7 @@ export default function AdminPage() {
     );
   }
 
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated || !isAdmin || usuario?.role === 'COMERCIAL') {
     return null;
   }
 
@@ -100,6 +101,20 @@ export default function AdminPage() {
       icon: '📤',
       color: 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100',
     },
+    {
+      title: 'Fila Performance',
+      description: 'Cotações aguardando decisão interna da operação',
+      href: '/admin/performance-fila',
+      icon: '📥',
+      color: 'bg-rose-50 border-rose-200 hover:bg-rose-100',
+    },
+    {
+      title: 'Base Histórica IA (Performance)',
+      description: 'Manter racional e preço final para dataset de IA assistiva',
+      href: '/admin/performance-historico',
+      icon: '🧠',
+      color: 'bg-fuchsia-50 border-fuchsia-200 hover:bg-fuchsia-100',
+    },
   ];
 
   return (
@@ -116,12 +131,15 @@ export default function AdminPage() {
                 Gerencie configurações de precificação e regras do sistema
               </p>
             </div>
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              ← Voltar ao Dashboard
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                ← Voltar ao Dashboard
+              </Link>
+              <UserMenu />
+            </div>
           </div>
         </div>
 
