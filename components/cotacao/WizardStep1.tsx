@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -67,6 +67,15 @@ const schemaStep1 = z.object({
       'URL deve começar com http:// ou https://'
     ),
   cotacaoProativa: z.boolean().default(false),
+  anexoDriveLink: z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return undefined;
+      const normalizedValue = value.trim();
+      if (normalizedValue === '') return undefined;
+      return normalizarUrlComHttps(normalizedValue);
+    },
+    z.string().url('Link do anexo inválido').optional()
+  ),
   observacoesGerais: z.string().optional(),
   observacoes: z.string().optional(),
 });
@@ -86,6 +95,8 @@ export function WizardStep1({
 }: WizardStep1Props) {
   const [solicitantes, setSolicitantes] = useState<Array<{ id: string; nome: string; email: string }>>([]);
   const [agencias, setAgencias] = useState<Array<{ id: string; nome: string }>>([]);
+  const [uploadingAnexo, setUploadingAnexo] = useState(false);
+  const [erroUploadAnexo, setErroUploadAnexo] = useState<string | null>(null);
 
   const dataSolicitacaoPadrao = useMemo(
     () => dayjs().format('YYYY-MM-DDTHH:mm'),
@@ -179,7 +190,7 @@ export function WizardStep1({
               );
               if (solicitanteDoUsuario) {
                 setValue('solicitanteId', solicitanteDoUsuario.id, {
-                  shouldValidate: true,
+                  shouldValidate: false,
                   shouldDirty: false,
                 });
                 setValue('solicitanteNome', solicitanteDoUsuario.nome);
@@ -201,6 +212,41 @@ export function WizardStep1({
     data.clienteNome = data.anuncianteCampanha;
     data.observacoes = data.observacoesGerais;
     onSubmit(data);
+  };
+
+  const handleUploadAnexoDrive = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setErroUploadAnexo(null);
+    setUploadingAnexo(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/integrations/drive/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.success || !payload?.url) {
+        throw new Error(payload?.error || 'Falha ao enviar arquivo para o Drive.');
+      }
+
+      setValue('anexoDriveLink', payload.url, { shouldValidate: false, shouldDirty: true });
+    } catch (error) {
+      setErroUploadAnexo(error instanceof Error ? error.message : 'Erro ao enviar anexo.');
+    } finally {
+      setUploadingAnexo(false);
+      event.target.value = '';
+    }
   };
 
   const handleFormError = (formErrors: any) => {
@@ -367,6 +413,32 @@ export function WizardStep1({
           />
           <span className="ml-3 text-gray-700">Sim, esta cotação é pró-ativa</span>
         </label>
+      </FormField>
+
+      <FormField
+        label="Anexo (Drive)"
+        name="anexoDriveLink"
+        error={errors.anexoDriveLink?.message || erroUploadAnexo || undefined}
+        helpText="Opcional. Você pode colar um link ou enviar arquivo para upload automático no Drive."
+      >
+        <div className="space-y-3">
+          <input
+            type="url"
+            id="anexoDriveLink"
+            {...register('anexoDriveLink')}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            placeholder="https://drive.google.com/..."
+          />
+          <label className="inline-flex items-center gap-2 px-4 py-2 text-sm text-primary border border-primary rounded-lg hover:bg-primary hover:text-white transition-colors cursor-pointer">
+            <input
+              type="file"
+              className="hidden"
+              onChange={handleUploadAnexoDrive}
+              disabled={uploadingAnexo}
+            />
+            {uploadingAnexo ? 'Enviando arquivo...' : 'Enviar arquivo para o Drive'}
+          </label>
+        </div>
       </FormField>
 
       <FormField

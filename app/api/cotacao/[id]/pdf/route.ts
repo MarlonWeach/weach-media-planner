@@ -14,12 +14,14 @@ import {
   sendPerformanceQueueNotificationEmail,
   sendCotacaoOperationalEmail,
 } from '@/lib/notifications/cotacaoEmail';
+import { syncCotacaoToGoogleSheets } from '@/lib/integrations/googleSheetsCotacao';
 import { normalizarCidadesParaExibicao } from '@/lib/utils/cidades';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
 type DefinicaoCampanha = 'PERFORMANCE' | 'PROGRAMATICA' | 'WHATSAPP_SMS_PUSH';
+const PDF_PUBLIC_CLEANUP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 interface ObservacaoPayload {
   solicitacao?: {
@@ -54,6 +56,27 @@ function serializarErro(error: unknown): Record<string, unknown> {
   return {
     message: String(error),
   };
+}
+
+function limparPdfsPublicosAntigos(publicPdfDir: string): void {
+  if (!fs.existsSync(publicPdfDir)) return;
+  const agora = Date.now();
+  const arquivos = fs.readdirSync(publicPdfDir);
+  for (const arquivo of arquivos) {
+    if (!arquivo.endsWith('.pdf') || !arquivo.startsWith('cotacao-')) {
+      continue;
+    }
+    const caminhoArquivo = path.join(publicPdfDir, arquivo);
+    try {
+      const stat = fs.statSync(caminhoArquivo);
+      const idadeMs = agora - stat.mtimeMs;
+      if (idadeMs > PDF_PUBLIC_CLEANUP_MAX_AGE_MS) {
+        fs.unlinkSync(caminhoArquivo);
+      }
+    } catch {
+      // Mantém fluxo resiliente: falhas de limpeza não devem bloquear envio da cotação.
+    }
+  }
 }
 
 function extrairDefinicaoCampanhaDaObservacao(observacoes: string | null): DefinicaoCampanha[] {
@@ -319,6 +342,9 @@ export async function POST(
     }
     const publicPdfDir = path.join(process.cwd(), 'public', 'pdfs');
     const podePersistirPdfPublico = !process.env.VERCEL;
+    if (podePersistirPdfPublico) {
+      limparPdfsPublicosAntigos(publicPdfDir);
+    }
 
     const nowTs = Date.now();
     let pdfFileName = '';
@@ -472,16 +498,32 @@ export async function POST(
           );
         }
       }
-    } catch (emailError) {
+
+      await syncCotacaoToGoogleSheets({
+        id: cotacao.id,
+        numeroSequencial: cotacao.numeroSequencial,
+        createdAt: cotacao.createdAt,
+        dataInicio: cotacao.dataInicio,
+        dataFim: cotacao.dataFim,
+        clienteNome: cotacao.clienteNome,
+        clienteSegmento: cotacao.clienteSegmento,
+        urlLp: cotacao.urlLp,
+        budget: Number(cotacao.budget),
+        solicitanteNome: cotacao.solicitanteNome,
+        solicitanteEmail: cotacao.solicitanteEmail,
+        agenciaNome: cotacao.agenciaNome,
+        observacoes: cotacao.observacoes,
+      });
+    } catch (dispatchError) {
       console.error(
-        '[CotacaoEmail][erro]',
-        JSON.stringify({ cotacaoId, erro: serializarErro(emailError) })
+        '[CotacaoDispatch][erro]',
+        JSON.stringify({ cotacaoId, erro: serializarErro(dispatchError) })
       );
       return NextResponse.json(
         {
           success: false,
           error:
-            'Envio de e-mail falhou. Revise configuração SMTP/destinatários.',
+            'Falha no envio/sincronização da cotação. Revise SMTP, destinatários e integração Google Sheets.',
           cotacaoId,
           pdfUrl,
         },

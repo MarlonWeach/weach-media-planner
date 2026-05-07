@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
 import { sincronizarHistoricoComMixStep4 } from '@/lib/performance/historico';
+import { obterProximoNumeroSequencialCotacao } from '@/lib/cotacao/sequencial';
 
 const schemaRascunho = z.object({
   cotacaoId: z.string().uuid().optional(),
@@ -175,8 +176,10 @@ export async function POST(request: NextRequest) {
 
       const relacionamentos = await normalizarRelacionamentosStep1(dados.step1);
 
+      const numeroSequencial = await obterProximoNumeroSequencialCotacao();
       const novaCotacao = await prisma.wp_Cotacao.create({
         data: {
+          numeroSequencial,
           clienteNome: dados.step1.clienteNome || 'Rascunho',
           clienteSegmento: dados.step1.clienteSegmento || 'OUTROS',
           urlLp: dados.step1.urlLp || 'https://exemplo.com',
@@ -210,6 +213,7 @@ export async function POST(request: NextRequest) {
         success: true,
         cotacao: {
           id: novaCotacao.id,
+          numeroSequencial: novaCotacao.numeroSequencial,
           status: novaCotacao.status,
         },
       });

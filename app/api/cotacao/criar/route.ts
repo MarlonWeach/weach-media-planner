@@ -11,6 +11,7 @@ import { gerarDistribuicaoBudgetPorFormato, gerarMixMidia } from '@/lib/ia/media
 import { gerarExplicacaoComercial } from '@/lib/ia/explainer';
 import { validarPlanoMidia } from '@/lib/ia/validator';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
+import { obterProximoNumeroSequencialCotacao } from '@/lib/cotacao/sequencial';
 import type { Prisma } from '@prisma/client';
 
 const CANAIS_VALIDOS = [
@@ -195,8 +196,10 @@ export async function POST(request: NextRequest) {
     );
 
     // 6. Salva no banco
+    const numeroSequencial = await obterProximoNumeroSequencialCotacao();
     const cotacao = await prisma.wp_Cotacao.create({
       data: {
+        numeroSequencial,
         clienteNome: dados.clienteNome,
         clienteSegmento: dados.clienteSegmento,
         urlLp: dados.urlLp,
@@ -259,6 +262,7 @@ export async function POST(request: NextRequest) {
       success: true,
       cotacao: {
         id: cotacao.id,
+        numeroSequencial: cotacao.numeroSequencial,
         mix: { ...mixResultado, mix: mixNormalizado, distribuicaoFormatos },
         precos: precosCalculados,
         estimativas,

@@ -26,6 +26,7 @@ model wp_Usuario {
 
 model wp_Cotacao {
   id                  String                 @id @default(uuid())
+  numeroSequencial    Int?                   @unique
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
   clienteNome         String
@@ -56,15 +57,35 @@ model wp_Cotacao {
   agencia             wp_Agencia?            @relation(fields: [agenciaId], references: [id])
   historicoIA         wp_HistoricoIA[]
   logsPreco           wp_LogAlteracaoPreco[]
+  integracaoSheetsLog wp_IntegracaoSheetsLog?
 
   @@index([clienteSegmento])
   @@index([regiao])
   @@index([objetivo])
   @@index([status])
   @@index([createdAt])
+  @@index([numeroSequencial])
   @@index([vendedorId])
   @@index([solicitanteId])
   @@index([agenciaId])
+}
+
+model wp_IntegracaoSheetsLog {
+  id              String     @id @default(uuid())
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  cotacaoId       String     @unique
+  status          String
+  tentativas      Int        @default(0)
+  ultimoErro      String?
+  ultimoSyncAt    DateTime?
+  sheetName       String?
+  linhasEnviadas  Int?
+  ultimaReferencia String?
+  cotacao         wp_Cotacao @relation(fields: [cotacaoId], references: [id])
+
+  @@index([status])
+  @@index([updatedAt])
 }
 
 model wp_Solicitante {

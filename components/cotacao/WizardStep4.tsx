@@ -1063,9 +1063,11 @@ export function WizardStep4({
         solicitanteEmail: dados.step1.solicitanteEmail,
         dataSolicitacao: dados.step1.dataSolicitacao,
         anuncianteCampanha: dados.step1.anuncianteCampanha,
+        urlLp: dados.step1.urlLp,
         agenciaId: dados.step1.agenciaId,
         agencia: dados.step1.agenciaNome,
         cotacaoProativa: dados.step1.cotacaoProativa || false,
+        anexoDriveLink: dados.step1.anexoDriveLink || '',
         observacoesGerais: dados.step1.observacoesGerais || '',
       },
       estrategia: {
@@ -1087,6 +1089,7 @@ export function WizardStep4({
         programatica: {
           modelos: dados.step2.modelosProgramatica || [],
           modeloOutro: dados.step2.modeloProgramaticaOutro || '',
+          formatosPretendidos: dados.step2.formatosPretendidos || '',
           segmentacaoExigida: dados.step2.segmentacaoExigida || '',
           kpiObjetivo: dados.step2.kpiObjetivo || '',
           precisaDadosAudiencia: dados.step2.precisaDadosAudiencia,

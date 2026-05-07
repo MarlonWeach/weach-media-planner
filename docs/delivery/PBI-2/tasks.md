@@ -23,6 +23,7 @@
 | 2-14 | Criar onboarding de senha para solicitante via e-mail com link de definição de senha | ✅ Done | 🚨 Crítica |
 | 2-15 | Reenviar convite/reset de senha do solicitante em /admin/cadastros e garantir provisionamento COMERCIAL automático | ✅ Done | 🚨 Crítica |
 | 2-16 | Pré-selecionar solicitante da sessão em nova cotação, mantendo seleção manual | ✅ Done | 📌 Média |
+| 2-17 | Automatizar housekeeping de PDFs locais de teste e evitar versionamento acidental de anexos | ✅ Done | 📌 Média |
 
 ## Ordem de Execução Recomendada
 
@@ -38,6 +39,7 @@
 10. **2-14** - Convite por e-mail e criação de senha de solicitante
 11. **2-15** - Reset de senha por convite e sincronização automática para COMERCIAL
 12. **2-16** - Pré-seleção do solicitante da sessão no wizard de cotação
+13. **2-17** - Housekeeping automático de PDFs locais e hardening do .gitignore
 
 ## Observações
 - A task `2-5` foi absorvida pela `2-4`, pois o painel unificado em `/admin/regras-preco` já contempla regras fixas e condicionais no mesmo fluxo de cadastro/edição.

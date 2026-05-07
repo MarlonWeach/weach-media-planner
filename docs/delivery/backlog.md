@@ -16,6 +16,7 @@
 | PBI-8A | Fase 8A - Workflow de Cotação por E-mail | ✅ Done | ⚠️ Alta |
 | PBI-8B | Fase 8B - Base Histórica para IA de Performance | ✅ Done | ⚠️ Alta |
 | PBI-8C | Fase 8C - Operação Interna de Decisão de Performance | 📌 Pendente | ⚠️ Alta |
+| PBI-9 | Fase 9 - Convivência Google Form + ID Sequencial + Sync de Respostas | 📌 Pendente | ⚠️ Alta |
 
 ## Legenda de Status
 
@@ -45,4 +46,5 @@
 9. **PBI-8A** - Workflow por E-mail
 10. **PBI-8B** - Base Histórica para IA
 11. **PBI-8C** - Operação Interna de Decisão
+12. **PBI-9** - Convivência e transição do Google Form para o sistema
 

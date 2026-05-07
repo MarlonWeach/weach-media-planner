@@ -107,6 +107,7 @@ const schemaStep2 = z.object({
   clienteValorSugerido: z.string().optional(),
   modelosProgramatica: z.array(z.string()).optional(),
   modeloProgramaticaOutro: z.string().optional(),
+  formatosPretendidos: z.string().optional(),
   segmentacaoExigida: z.string().optional(),
   kpiObjetivo: z.string().optional(),
   precisaDadosAudiencia: booleanFromRadio,
@@ -414,6 +415,19 @@ export function WizardStep2({
                 </label>
               ))}
             </div>
+          </FormField>
+
+          <FormField
+            label="A agência/cliente informou qual formato de display ou vídeo pretende utilizar?"
+            name="formatosPretendidos"
+            helpText='Resposta livre. Ex.: IAB, vídeo 15", vídeo 30", carrossel.'
+          >
+            <textarea
+              {...register('formatosPretendidos')}
+              rows={3}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+              placeholder='Ex.: IAB 300x250, vídeo 15", bumper 6", CTV 30"'
+            />
           </FormField>
 
           {modelosProgramaticaSelecionados.includes('OUTRO') && (
