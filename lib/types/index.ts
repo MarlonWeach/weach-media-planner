@@ -3,7 +3,23 @@
  */
 
 export type Role = 'ADMIN' | 'MANAGER' | 'COMERCIAL';
-export type Segmento = 'AUTOMOTIVO' | 'FINANCEIRO' | 'VAREJO' | 'IMOBILIARIO' | 'SAUDE' | 'EDUCACAO' | 'TELECOM' | 'SERVICOS' | 'OUTROS';
+export type Segmento =
+  | 'AUTOMOTIVO'
+  | 'FINANCEIRO'
+  | 'VAREJO'
+  | 'IMOBILIARIO'
+  | 'SAUDE'
+  | 'EDUCACAO'
+  | 'TELECOM'
+  | 'SERVICOS'
+  | 'CPG_BENS_CONSUMO'
+  | 'PROMOCAO'
+  | 'SAAS'
+  | 'B2B'
+  | 'AGRO'
+  | 'TURISMO'
+  | 'BELEZA_SAUDE'
+  | 'OUTROS';
 export type Objetivo = 'AWARENESS' | 'CONSIDERACAO' | 'LEADS' | 'VENDAS';
 export type MaturidadeDigital = 'BAIXA' | 'MEDIA' | 'ALTA';
 export type ToleranciaRisco = 'BAIXA' | 'MEDIA' | 'ALTA';

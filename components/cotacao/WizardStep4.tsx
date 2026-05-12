@@ -191,10 +191,48 @@ export function WizardStep4({
   const [cotacaoId, setCotacaoId] = useState<string | null>(null);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [erroAjuste, setErroAjuste] = useState<string | null>(null);
+  /** Notificação em página (substitui `alert` do browser). */
+  const [bannerFluxo, setBannerFluxo] = useState<{
+    tipo: 'success' | 'warning' | 'error' | 'info';
+    titulo?: string;
+    mensagem: string;
+    pdfHref?: string;
+    /** Se true, há temporizador para `/` (cancelável ao fechar o banner). */
+    redirecionaHome?: boolean;
+  } | null>(null);
+  const redirecionarHomeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inicializacaoExecutadaRef = useRef(false);
-  const isPerformanceCotacao = Array.isArray(dadosPassos?.step2?.definicaoCampanha)
-    ? dadosPassos.step2.definicaoCampanha.includes('PERFORMANCE')
-    : false;
+
+  const cancelarRedirecionamentoHome = () => {
+    if (redirecionarHomeTimerRef.current != null) {
+      clearTimeout(redirecionarHomeTimerRef.current);
+      redirecionarHomeTimerRef.current = null;
+    }
+  };
+
+  const agendarRedirecionamentoHome = (ms: number) => {
+    cancelarRedirecionamentoHome();
+    redirecionarHomeTimerRef.current = setTimeout(() => {
+      redirecionarHomeTimerRef.current = null;
+      window.location.href = '/';
+    }, ms);
+  };
+
+  useEffect(() => {
+    return () => {
+      cancelarRedirecionamentoHome();
+    };
+  }, []);
+  const definicoesCampanhaStep2 = Array.isArray(dadosPassos?.step2?.definicaoCampanha)
+    ? dadosPassos.step2.definicaoCampanha
+    : [];
+  const temPerformance = definicoesCampanhaStep2.includes('PERFORMANCE');
+  const temProgramaticaOuMensageria =
+    definicoesCampanhaStep2.includes('PROGRAMATICA') ||
+    definicoesCampanhaStep2.includes('WHATSAPP_SMS_PUSH');
+  const ehHibridoPerformanceMidia = temPerformance && temProgramaticaOuMensageria;
+  /** Só performance: sem plano tabulado neste passo. Com programática/mensageria, exibe a parte tabulada. */
+  const apenasPerformanceNoWizard = temPerformance && !temProgramaticaOuMensageria;
 
   const obterHeadersAutenticacao = (): HeadersInit | null => {
     const token = localStorage.getItem('auth_token');
@@ -207,10 +245,36 @@ export function WizardStep4({
     };
   };
 
-  const carregarItensSalvos = () => {
+  const carregarItensSalvos = async (): Promise<boolean> => {
     if (!cotacaoExistente?.id || !Array.isArray(cotacaoExistente.mix) || cotacaoExistente.mix.length === 0) {
       return false;
     }
+
+    const authHeaders = obterHeadersAutenticacao();
+    if (!authHeaders) {
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+
+    const regiaoNormalizada = normalizarRegiaoParaMotor(dadosPassos.step3);
+    const pricingResponse = await fetch('/api/pricing/calcular', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({
+        segmento: dadosPassos.step1?.clienteSegmento,
+        regiao: regiaoNormalizada,
+        budget: Number(dadosPassos.step3?.budget),
+        objetivo: dadosPassos.step2?.objetivo,
+      }),
+    });
+    if (!pricingResponse.ok) {
+      const pricingData = await pricingResponse.json().catch(() => ({}));
+      throw new Error(pricingData?.error || 'Erro ao recalcular preços para o rascunho.');
+    }
+    const pricingData = await pricingResponse.json();
+    const precosRecalculados = pricingData?.precos || {};
 
     const itensRestaurados = cotacaoExistente.mix
       .filter((item) => item && typeof item === 'object')
@@ -223,7 +287,10 @@ export function WizardStep4({
           Number.isFinite(Number(item.valorBudget))
             ? Number(item.valorBudget)
             : (dadosPassos.step3.budget * percentualBudget) / 100;
-        const preco = Number(item.precoUnitario ?? item.preco ?? 0);
+        const precoRecalculado = obterPrecoCanal(canal, formato, precosRecalculados);
+        const preco = Number.isFinite(precoRecalculado)
+          ? Number(precoRecalculado)
+          : Number(item.precoUnitario ?? item.preco ?? 0);
         const precoSeguro = Number.isFinite(preco) && preco > 0 ? preco : 0;
 
         return {
@@ -262,12 +329,19 @@ export function WizardStep4({
     }
     inicializacaoExecutadaRef.current = true;
 
-    const carregouSalvo = carregarItensSalvos();
-    if (carregouSalvo) {
-      setLoading(false);
-      return;
-    }
-    gerarCotacao();
+    void (async () => {
+      try {
+        const carregouSalvo = await carregarItensSalvos();
+        if (carregouSalvo) {
+          setLoading(false);
+          return;
+        }
+        await gerarCotacao();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao carregar dados do rascunho.');
+        setLoading(false);
+      }
+    })();
   }, []);
 
   const gerarCotacao = async () => {
@@ -943,7 +1017,36 @@ export function WizardStep4({
   const somaPercentualAtual = Number(
     itemsPlano.reduce((acc, item) => acc + item.percentualBudget, 0).toFixed(2)
   );
-  const distribuicaoCompleta = isPerformanceCotacao ? true : somaPercentualAtual === 100;
+  const distribuicaoCompleta = apenasPerformanceNoWizard ? true : somaPercentualAtual === 100;
+
+  const indicesPlanoVisivel = ehHibridoPerformanceMidia
+    ? itemsPlano
+        .map((item, index) => (item.canal === 'CPL_CPI' ? null : index))
+        .filter((i): i is number => i !== null)
+    : itemsPlano.map((_, index) => index);
+
+  const itensVisiveisNoPasso4 = indicesPlanoVisivel.map((i) => itemsPlano[i]);
+
+  const calcularEstimativasSobreItens = (itens: ItemPlanoMidia[]) =>
+    itens.reduce(
+      (acc, item) => {
+        acc.impressoes += item.estimativas?.impressoes || 0;
+        acc.cliques += item.estimativas?.cliques || 0;
+        acc.leads += item.estimativas?.leads || 0;
+        return acc;
+      },
+      { impressoes: 0, cliques: 0, leads: 0 }
+    );
+
+  const estimativasParaExibicao = ehHibridoPerformanceMidia
+    ? calcularEstimativasSobreItens(itensVisiveisNoPasso4)
+    : calcularEstimativasAtuais();
+
+  const budgetParaEstimativasCard = ehHibridoPerformanceMidia
+    ? itensVisiveisNoPasso4.reduce((acc, item) => acc + item.valorBudget, 0)
+    : dadosPassos.step3.budget;
+
+  const resolverIndicePlanoReal = (indexVisivel: number) => indicesPlanoVisivel[indexVisivel] ?? -1;
 
   const sincronizarAjustesCotacao = async () => {
     if (!cotacaoId) return;
@@ -961,6 +1064,7 @@ export function WizardStep4({
       body: JSON.stringify({
         cotacaoId,
         step4: montarStep4Payload(),
+        observacoesCompletas: montarObservacoesCompletas(dadosPassos),
       }),
     });
 
@@ -972,12 +1076,19 @@ export function WizardStep4({
 
   const handleGerarPDF = async () => {
     if (!cotacaoId) return;
-    if (!isPerformanceCotacao && !distribuicaoCompleta) {
-      alert('A soma de % budget deve ser 100% antes de gerar PDF.');
+    if (!apenasPerformanceNoWizard && !distribuicaoCompleta) {
+      setBannerFluxo({
+        tipo: 'warning',
+        titulo: 'Distribuição incompleta',
+        mensagem: 'A soma de % budget deve ser 100% antes de enviar a cotação.',
+      });
       return;
     }
 
+    const esperaPdfPlanoNaResposta = !apenasPerformanceNoWizard;
+
     setGerandoPDF(true);
+    setBannerFluxo(null);
     try {
       await sincronizarAjustesCotacao();
       const authHeaders = obterHeadersAutenticacao();
@@ -996,18 +1107,50 @@ export function WizardStep4({
       }
 
       const data = await response.json();
-      if (data.pdfUrl) {
-        // Abre o PDF em nova aba
-        window.open(data.pdfUrl, '_blank');
+      let pdfHref: string | undefined;
+      if (data.pdfUrl && typeof window !== 'undefined') {
+        pdfHref =
+          typeof data.pdfUrl === 'string' && data.pdfUrl.startsWith('http')
+            ? data.pdfUrl
+            : `${window.location.origin}${data.pdfUrl}`;
+        /** Vários browsers devolvem `null` mesmo com a aba aberta (p.ex. noopener + PDF). Não inferir falha. */
+        window.open(pdfHref, '_blank', 'noopener,noreferrer');
       }
-      alert(
-        isPerformanceCotacao
-          ? data.message || 'Cotação enviada com sucesso para análise interna.'
-          : 'Cotação enviada com sucesso.'
-      );
-      window.location.href = '/';
+
+      const tituloSucesso = temPerformance
+        ? 'Cotação enviada'
+        : 'Cotação enviada com sucesso';
+
+      const mensagemPerformance =
+        data.message || 'A cotação foi registada e segue o fluxo interno definido.';
+
+      if (esperaPdfPlanoNaResposta && pdfHref) {
+        setBannerFluxo({
+          tipo: 'success',
+          titulo: tituloSucesso,
+          mensagem:
+            'O PDF do plano foi pedido ao navegador (normalmente numa nova aba). Se não vir o separador ou a aba ficar em branco por uns segundos, use o link abaixo — a cotação já ficou registada.',
+          pdfHref,
+          redirecionaHome: true,
+        });
+      } else {
+        setBannerFluxo({
+          tipo: 'success',
+          titulo: tituloSucesso,
+          mensagem: temPerformance ? mensagemPerformance : 'A cotação foi registada com sucesso.',
+          redirecionaHome: true,
+        });
+      }
+
+      const delayRedirect = esperaPdfPlanoNaResposta && pdfHref ? 45000 : 35000;
+      agendarRedirecionamentoHome(delayRedirect);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao gerar PDF. Tente novamente.');
+      cancelarRedirecionamentoHome();
+      setBannerFluxo({
+        tipo: 'error',
+        titulo: 'Não foi possível concluir o envio',
+        mensagem: err instanceof Error ? err.message : 'Erro ao gerar PDF. Tente novamente.',
+      });
     } finally {
       setGerandoPDF(false);
     }
@@ -1016,16 +1159,29 @@ export function WizardStep4({
   const handleSalvarRascunho = async () => {
     if (!cotacaoId) return;
     if (!distribuicaoCompleta) {
-      alert('A soma de % budget deve ser 100% para salvar o rascunho.');
+      setBannerFluxo({
+        tipo: 'warning',
+        titulo: 'Distribuição incompleta',
+        mensagem: 'A soma de % budget deve ser 100% para salvar o rascunho.',
+      });
       return;
     }
 
+    setBannerFluxo(null);
     try {
       await sincronizarAjustesCotacao();
 
-      alert('Rascunho salvo com sucesso!');
+      setBannerFluxo({
+        tipo: 'success',
+        titulo: 'Rascunho guardado',
+        mensagem: 'As alterações ao plano foram sincronizadas.',
+      });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao salvar rascunho. Tente novamente.');
+      setBannerFluxo({
+        tipo: 'error',
+        titulo: 'Erro ao guardar',
+        mensagem: err instanceof Error ? err.message : 'Erro ao salvar rascunho. Tente novamente.',
+      });
     }
   };
 
@@ -1105,7 +1261,6 @@ export function WizardStep4({
     return JSON.stringify(payload, null, 2);
   };
 
-  const estimativasAtuais = calcularEstimativasAtuais();
   const exibirMetricasLeads = ['LEADS', 'VENDAS'].includes(
     String(dadosPassos?.step2?.objetivo || '')
   );
@@ -1147,46 +1302,90 @@ export function WizardStep4({
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      {bannerFluxo && (
+        <div
+          className="fixed inset-x-0 top-0 z-[100] flex justify-center px-3 pt-3 sm:pt-4 pointer-events-none print:hidden"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="pointer-events-auto w-full max-w-2xl rounded-lg border border-gray-200 bg-white p-4 shadow-lg">
+            <AlertBox
+              type={bannerFluxo.tipo}
+              title={bannerFluxo.titulo}
+              message={bannerFluxo.mensagem}
+              onDismiss={() => {
+                const irParaInicio = Boolean(bannerFluxo.redirecionaHome);
+                cancelarRedirecionamentoHome();
+                setBannerFluxo(null);
+                if (irParaInicio) {
+                  window.location.href = '/';
+                }
+              }}
+            />
+            {bannerFluxo.pdfHref ? (
+              <p className="mt-3 pl-9 text-sm">
+                <a
+                  href={bannerFluxo.pdfHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-primary hover:underline"
+                >
+                  Abrir ou reabrir o PDF do plano
+                </a>
+              </p>
+            ) : null}
+            {bannerFluxo.redirecionaHome ? (
+              <p className="mt-2 pl-9 text-xs text-gray-500">
+                Será redirecionado para o início em até cerca de um minuto. Ao fechar este aviso, o redirecionamento
+                para o início ocorre na hora.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      )}
+      <div className="space-y-6">
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-primary-dark mb-2">
           Resultado e Ajustes
         </h2>
         <p className="text-gray-600">
-          {isPerformanceCotacao
+          {apenasPerformanceNoWizard
             ? 'Clique em Enviar Cotação para receber o plano de mídia.'
-            : 'Revise o plano de mídia gerado e faça ajustes se necessário'}
+            : ehHibridoPerformanceMidia
+              ? 'Há performance e veiculação programática ou mensageria: a parte de performance segue para análise interna; revise e ajuste o plano tabulado da programática abaixo.'
+              : 'Revise o plano de mídia gerado e faça ajustes se necessário'}
         </p>
       </div>
 
       {/* Estimativas */}
-      {!isPerformanceCotacao && itemsPlano.length > 0 && itemsPlano[0].estimativas && (
+      {!apenasPerformanceNoWizard && itemsPlano.length > 0 && itemsPlano[0].estimativas && (
         <div className="mb-6">
           <EstimativasCard
             estimativas={{
-              impressoes: estimativasAtuais.impressoes,
-              cliques: estimativasAtuais.cliques,
-              leads: estimativasAtuais.leads,
+              impressoes: estimativasParaExibicao.impressoes,
+              cliques: estimativasParaExibicao.cliques,
+              leads: estimativasParaExibicao.leads,
               cpmEstimado:
-                estimativasAtuais.impressoes > 0
-                  ? dadosPassos.step3.budget / (estimativasAtuais.impressoes / 1000)
+                estimativasParaExibicao.impressoes > 0
+                  ? budgetParaEstimativasCard / (estimativasParaExibicao.impressoes / 1000)
                   : 0,
               cpcEstimado:
-                estimativasAtuais.cliques > 0
-                  ? dadosPassos.step3.budget / estimativasAtuais.cliques
+                estimativasParaExibicao.cliques > 0
+                  ? budgetParaEstimativasCard / estimativasParaExibicao.cliques
                   : 0,
               cplEstimado:
-                estimativasAtuais.leads > 0
-                  ? dadosPassos.step3.budget / estimativasAtuais.leads
+                estimativasParaExibicao.leads > 0
+                  ? budgetParaEstimativasCard / estimativasParaExibicao.leads
                   : 0,
               exibirMetricasLeads,
             }}
-            budgetTotal={dadosPassos.step3.budget}
+            budgetTotal={budgetParaEstimativasCard}
           />
         </div>
       )}
 
-      {!isPerformanceCotacao && erroAjuste && (
+      {!apenasPerformanceNoWizard && erroAjuste && (
         <AlertBox
           type="error"
           title="Ajuste pendente no plano"
@@ -1195,18 +1394,40 @@ export function WizardStep4({
       )}
 
       {/* Tabela de Preços */}
-      {!isPerformanceCotacao && (
+      {!apenasPerformanceNoWizard && (
         <div>
+          {ehHibridoPerformanceMidia && (
+            <AlertBox
+              type="info"
+              title="Cotação híbrida (performance + programática)"
+              message={
+                'A parte de performance (ex.: CPL/CPI) não é exibida como plano fechado aqui, pois depende de respostas e da validação interna. Abaixo está somente o plano tabulado da programática e/ou mensageria (linhas CPL/CPI de performance foram omitidas da tabela).'
+              }
+            />
+          )}
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Plano de Mídia
+            {ehHibridoPerformanceMidia ? ' — programática / mensageria' : ''}
           </h3>
           <PricingTable
-            items={itemsPlano}
+            items={itensVisiveisNoPasso4}
             budgetTotal={dadosPassos.step3.budget}
             editable={true}
             exibirMetricasLeads={exibirMetricasLeads}
-            onPriceChange={handlePriceChange}
-            onBudgetPercentChange={handleBudgetPercentChange}
+            onPriceChange={(indexVisivel, novoPreco) => {
+              const realIndex = resolverIndicePlanoReal(indexVisivel);
+              if (realIndex < 0) {
+                return { ok: false, message: 'Linha inválida.' };
+              }
+              return handlePriceChange(realIndex, novoPreco);
+            }}
+            onBudgetPercentChange={(indexVisivel, novoPercentual) => {
+              const realIndex = resolverIndicePlanoReal(indexVisivel);
+              if (realIndex < 0) {
+                return { ok: false, message: 'Linha inválida.' };
+              }
+              return handleBudgetPercentChange(realIndex, novoPercentual);
+            }}
           />
         </div>
       )}
@@ -1239,7 +1460,8 @@ export function WizardStep4({
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

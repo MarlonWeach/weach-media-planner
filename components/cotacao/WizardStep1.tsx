@@ -10,18 +10,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { FormField } from './FormField';
 import dayjs from 'dayjs';
-
-const segmentos = [
-  { value: 'AUTOMOTIVO', label: 'Automotivo' },
-  { value: 'FINANCEIRO', label: 'Financeiro' },
-  { value: 'VAREJO', label: 'Varejo' },
-  { value: 'IMOBILIARIO', label: 'Imobiliário' },
-  { value: 'SAUDE', label: 'Saúde' },
-  { value: 'EDUCACAO', label: 'Educação' },
-  { value: 'TELECOM', label: 'Telecom' },
-  { value: 'SERVICOS', label: 'Serviços' },
-  { value: 'OUTROS', label: 'Outros' },
-] as const;
+import { SEGMENTOS_WIZARD } from '@/lib/cotacao/segmentosCotacao';
 
 const uuidRegex =
   /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
@@ -97,6 +86,7 @@ export function WizardStep1({
   const [agencias, setAgencias] = useState<Array<{ id: string; nome: string }>>([]);
   const [uploadingAnexo, setUploadingAnexo] = useState(false);
   const [erroUploadAnexo, setErroUploadAnexo] = useState<string | null>(null);
+  const [nomeArquivoAnexo, setNomeArquivoAnexo] = useState<string | null>(null);
 
   const dataSolicitacaoPadrao = useMemo(
     () => dayjs().format('YYYY-MM-DDTHH:mm'),
@@ -128,7 +118,8 @@ export function WizardStep1({
     !!solicitanteIdSelecionado &&
     !!anuncianteCampanha?.trim() &&
     !!urlLp?.trim() &&
-    !!clienteSegmento;
+    !!clienteSegmento &&
+    !uploadingAnexo;
 
   useEffect(() => {
     // Regra de negócio: para nova cotação, sempre usar timestamp atual no momento
@@ -210,7 +201,6 @@ export function WizardStep1({
   const handleFormSubmit = (data: Step1Data) => {
     data.urlLp = normalizarUrlComHttps(data.urlLp);
     data.clienteNome = data.anuncianteCampanha;
-    data.observacoes = data.observacoesGerais;
     onSubmit(data);
   };
 
@@ -218,6 +208,7 @@ export function WizardStep1({
     const file = event.target.files?.[0];
     if (!file) return;
     setErroUploadAnexo(null);
+    setNomeArquivoAnexo(file.name);
     setUploadingAnexo(true);
     try {
       const token = localStorage.getItem('auth_token');
@@ -245,6 +236,7 @@ export function WizardStep1({
       setErroUploadAnexo(error instanceof Error ? error.message : 'Erro ao enviar anexo.');
     } finally {
       setUploadingAnexo(false);
+      setNomeArquivoAnexo(null);
       event.target.value = '';
     }
   };
@@ -396,7 +388,7 @@ export function WizardStep1({
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
         >
           <option value="">Selecione um segmento</option>
-          {segmentos.map((segmento) => (
+          {SEGMENTOS_WIZARD.map((segmento) => (
             <option key={segmento.value} value={segmento.value}>
               {segmento.label}
             </option>
@@ -422,6 +414,26 @@ export function WizardStep1({
         helpText="Opcional. Você pode colar um link ou enviar arquivo para upload automático no Drive."
       >
         <div className="space-y-3">
+          {uploadingAnexo && (
+            <div
+              className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-sm text-gray-800"
+              role="status"
+              aria-live="polite"
+            >
+              <p className="font-medium text-primary-dark">Enviando arquivo para o Drive…</p>
+              {nomeArquivoAnexo ? (
+                <p className="mt-1 text-gray-600 truncate" title={nomeArquivoAnexo}>
+                  {nomeArquivoAnexo}
+                </p>
+              ) : null}
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Aguarde a conclusão para avançar — o botão &quot;Próximo&quot; permanece desativado durante o upload.
+              </p>
+            </div>
+          )}
           <input
             type="url"
             id="anexoDriveLink"
@@ -429,14 +441,20 @@ export function WizardStep1({
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
             placeholder="https://drive.google.com/..."
           />
-          <label className="inline-flex items-center gap-2 px-4 py-2 text-sm text-primary border border-primary rounded-lg hover:bg-primary hover:text-white transition-colors cursor-pointer">
+          <label
+            className={`inline-flex items-center gap-2 px-4 py-2 text-sm border rounded-lg transition-colors ${
+              uploadingAnexo
+                ? 'cursor-not-allowed border-gray-200 text-gray-400 bg-gray-50'
+                : 'text-primary border-primary hover:bg-primary hover:text-white cursor-pointer'
+            }`}
+          >
             <input
               type="file"
               className="hidden"
               onChange={handleUploadAnexoDrive}
               disabled={uploadingAnexo}
             />
-            {uploadingAnexo ? 'Enviando arquivo...' : 'Enviar arquivo para o Drive'}
+            {uploadingAnexo ? 'Enviando…' : 'Enviar arquivo para o Drive'}
           </label>
         </div>
       </FormField>
@@ -469,10 +487,10 @@ export function WizardStep1({
         )}
         <button
           type="submit"
-          disabled={isSubmitting || !podeAvancar}
+          disabled={isSubmitting || !podeAvancar || uploadingAnexo}
           className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isSubmitting ? 'Salvando...' : 'Próximo'}
+          {uploadingAnexo ? 'Aguardando upload…' : isSubmitting ? 'Salvando...' : 'Próximo'}
         </button>
       </div>
     </form>

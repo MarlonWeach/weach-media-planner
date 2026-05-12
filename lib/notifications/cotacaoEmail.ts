@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { montarLinhasBriefingObservacoes, type BriefingLinha } from '@/lib/cotacao/briefingLinhas';
 
 type DefinicaoCampanha = 'PERFORMANCE' | 'PROGRAMATICA' | 'WHATSAPP_SMS_PUSH';
 
@@ -70,6 +71,30 @@ function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function htmlCelulaValorBriefing(label: string, valor: string): string {
+  const v = valor.trim();
+  if (
+    label === 'Link do anexo (Drive)' &&
+    (v.startsWith('http://') || v.startsWith('https://'))
+  ) {
+    return `<a href="${escapeHtml(v)}" style="color:#2563eb;word-break:break-all;">${escapeHtml(v)}</a>`;
+  }
+  return escapeHtml(valor);
+}
+
+function briefingLinhasParaHtmlTabela(linhas: BriefingLinha[]): string {
+  return linhas
+    .map(
+      (row) => `
+        <tr>
+          <td style="padding:8px 10px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;width:280px;vertical-align:top;">${escapeHtml(row.label)}</td>
+          <td style="padding:8px 10px;border:1px solid #e5e7eb;vertical-align:top;">${htmlCelulaValorBriefing(row.label, row.value)}</td>
+        </tr>
+      `
+    )
+    .join('');
 }
 
 function parseEmailsFromEnv(value: string | undefined): string[] {
@@ -228,13 +253,19 @@ function buildEmailBody(input: SendCotacaoEmailInput): string {
     `Agência: ${input.agenciaNome || 'Não informada'}`,
   ].join('\n');
 
+  const espelhoLinhas = montarLinhasBriefingObservacoes(input.observacoes);
+  const espelhoTexto = [
+    'Espelho completo do formulário (todas as perguntas e respostas):',
+    ...espelhoLinhas.map((row) => `  ${row.label}: ${row.value}`),
+  ].join('\n');
+
   if (hasPerformance) {
     const observacoes = `Observações / contexto:\n${observacoesGerais}`;
-    return `${header}${sectionDivider}${campanha}${sectionDivider}${solicitante}${sectionDivider}${observacoes}\n`;
+    return `${header}${sectionDivider}${campanha}${sectionDivider}${solicitante}${sectionDivider}${observacoes}${sectionDivider}${espelhoTexto}\n`;
   }
 
   const linhasPlano = buildPlanoTexto(input);
-  return `${header}${sectionDivider}${campanha}${sectionDivider}${solicitante}${sectionDivider}Plano de mídia:\n${linhasPlano}\n`;
+  return `${header}${sectionDivider}${campanha}${sectionDivider}${solicitante}${sectionDivider}${espelhoTexto}${sectionDivider}Plano de mídia:\n${linhasPlano}\n`;
 }
 
 function buildEmailHtml(input: SendCotacaoEmailInput): string {
@@ -246,11 +277,12 @@ function buildEmailHtml(input: SendCotacaoEmailInput): string {
       ? input.definicaoCampanha.join(', ')
       : 'Não informada';
 
-  const rows: Array<{ label: string; value: string }> = [
+  const espelhoLinhas = montarLinhasBriefingObservacoes(input.observacoes);
+  const resumoLinhas: BriefingLinha[] = [
     { label: 'ID da Cotação', value: input.cotacaoId },
     { label: 'Nome do Anunciante / Campanha', value: input.clienteNome },
     { label: 'Segmento', value: input.clienteSegmento },
-    { label: 'Objetivo', value: input.objetivo },
+    { label: 'Objetivo (cadastro)', value: input.objetivo || '(Em branco)' },
     { label: 'Budget', value: `R$ ${input.budget.toLocaleString('pt-BR')}` },
     { label: 'Região', value: input.regiao },
     { label: 'Definição de Campanha', value: definicao },
@@ -258,29 +290,17 @@ function buildEmailHtml(input: SendCotacaoEmailInput): string {
     { label: 'Solicitante', value: input.solicitanteNome || 'Não informado' },
     { label: 'E-mail do Solicitante', value: input.solicitanteEmail || 'Não informado' },
     { label: 'Agência', value: input.agenciaNome || 'Não informada' },
-    { label: 'Observações Gerais', value: observacoesGerais },
+    { label: 'Observações Gerais (texto livre legado)', value: observacoesGerais },
   ];
 
-  const rowsHtml = rows
-    .map(
-      (row) => `
-        <tr>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;color:#111827;width:280px;">
-            ${escapeHtml(row.label)}
-          </td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;color:#111827;">
-            ${escapeHtml(row.value)}
-          </td>
-        </tr>
-      `
-    )
-    .join('');
+  const todasLinhasResumoEspelho = [...resumoLinhas, ...espelhoLinhas];
+  const rowsHtml = briefingLinhasParaHtmlTabela(todasLinhasResumoEspelho);
 
   const briefingHtml = `
     <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.5;">
       <h2 style="margin:0 0 8px 0;">Formulário de Cotação - ${escapeHtml(input.clienteNome)}</h2>
       <p style="margin:0 0 16px 0;color:#4b5563;">
-        Cotação ${escapeHtml(input.cotacaoId)} enviada para análise comercial.
+        Cotação ${escapeHtml(input.cotacaoId)} enviada para análise comercial. A tabela abaixo inclui o resumo operacional e o espelho completo do formulário (programática, performance, cobertura, anexo e demais campos; respostas vazias aparecem como (Em branco)).
       </p>
       <table style="border-collapse:collapse;width:100%;max-width:980px;">
         <tbody>
@@ -385,122 +405,6 @@ function extrairObservacoesGerais(observacoes?: string): string {
     return 'Sem observações.';
   }
   return observacoes;
-}
-
-function extrairBriefingLinhas(observacoes?: string): Array<{ label: string; value: string }> {
-  if (!observacoes) return [];
-  try {
-    const payload = JSON.parse(observacoes) as {
-      solicitacao?: {
-        solicitante?: string;
-        solicitanteEmail?: string;
-        agencia?: string;
-        cotacaoProativa?: boolean;
-        observacoesGerais?: string;
-      };
-      estrategia?: {
-        objetivo?: string;
-        definicaoCampanha?: string[];
-        performance?: {
-          modelos?: string[];
-          cplCamposCadastro?: string;
-          cplExigiuFiltro?: boolean;
-          cplQualFiltro?: string;
-          cplConversaoLeadCompleta?: string;
-          veiculaOutrasRedes?: string;
-          veiculaQuaisRedes?: string;
-          clienteSugeriuValor?: boolean;
-          clienteValorSugerido?: string;
-        };
-      };
-      cobertura?: {
-        tipoRegiao?: string;
-        estadosSelecionados?: string[];
-        cidades?: string;
-      };
-    };
-
-    return [
-      { label: 'Solicitante', value: String(payload?.solicitacao?.solicitante || 'Não informado') },
-      {
-        label: 'E-mail do solicitante',
-        value: String(payload?.solicitacao?.solicitanteEmail || 'Não informado'),
-      },
-      { label: 'Agência', value: String(payload?.solicitacao?.agencia || 'Não informada') },
-      {
-        label: 'Cotação pró-ativa',
-        value: payload?.solicitacao?.cotacaoProativa ? 'Sim' : 'Não',
-      },
-      {
-        label: 'Observações gerais',
-        value: String(payload?.solicitacao?.observacoesGerais || 'Sem observações'),
-      },
-      {
-        label: 'Definição de campanha',
-        value: Array.isArray(payload?.estrategia?.definicaoCampanha)
-          ? payload!.estrategia!.definicaoCampanha!.join(', ')
-          : 'Não informada',
-      },
-      {
-        label: 'Modelos performance',
-        value: Array.isArray(payload?.estrategia?.performance?.modelos)
-          ? payload!.estrategia!.performance!.modelos!.join(', ')
-          : 'Não informado',
-      },
-      {
-        label: 'Campos de cadastro',
-        value: String(payload?.estrategia?.performance?.cplCamposCadastro || 'Não informado'),
-      },
-      {
-        label: 'Filtro exigido',
-        value: String(payload?.estrategia?.performance?.cplQualFiltro || 'Não informado'),
-      },
-      {
-        label: 'Exigiu filtro',
-        value:
-          payload?.estrategia?.performance?.cplExigiuFiltro === undefined
-            ? 'Não informado'
-            : payload.estrategia.performance.cplExigiuFiltro
-              ? 'Sim'
-              : 'Não',
-      },
-      {
-        label: 'Conversão completa',
-        value: String(payload?.estrategia?.performance?.cplConversaoLeadCompleta || 'Não informado'),
-      },
-      {
-        label: 'Cliente veicula em outras redes',
-        value: String(payload?.estrategia?.performance?.veiculaOutrasRedes || 'Não informado'),
-      },
-      {
-        label: 'Outras redes',
-        value: String(payload?.estrategia?.performance?.veiculaQuaisRedes || 'Não informado'),
-      },
-      {
-        label: 'Cliente sugeriu valor',
-        value:
-          payload?.estrategia?.performance?.clienteSugeriuValor === undefined
-            ? 'Não informado'
-            : payload.estrategia.performance.clienteSugeriuValor
-              ? 'Sim'
-              : 'Não',
-      },
-      {
-        label: 'Valor sugerido cliente',
-        value: String(payload?.estrategia?.performance?.clienteValorSugerido || 'Não informado'),
-      },
-      { label: 'Tipo de região', value: String(payload?.cobertura?.tipoRegiao || 'NACIONAL') },
-      {
-        label: 'Estados',
-        value: Array.isArray(payload?.cobertura?.estadosSelecionados)
-          ? payload!.cobertura!.estadosSelecionados!.join(', ') || 'Não informado'
-          : 'Não informado',
-      },
-      { label: 'Cidades', value: String(payload?.cobertura?.cidades || 'Não informado') },
-    ];
-  } catch {
-    return [];
-  }
 }
 
 function extrairResumoPrecoFinal(observacoes?: string): string | null {
@@ -675,6 +579,16 @@ function buildPlanoTexto(input: SendCotacaoEmailInput): string {
     .join('\n');
 }
 
+function buildPlanoRowsSomenteProgramatico(input: SendCotacaoEmailInput): string {
+  const mixFiltrado = (input.mix || []).filter((item) => item.canal !== 'CPL_CPI');
+  return buildPlanoRows({ ...input, mix: mixFiltrado });
+}
+
+function buildPlanoTextoSomenteProgramatico(input: SendCotacaoEmailInput): string {
+  const mixFiltrado = (input.mix || []).filter((item) => item.canal !== 'CPL_CPI');
+  return buildPlanoTexto({ ...input, mix: mixFiltrado });
+}
+
 export async function sendCotacaoOperationalEmail(
   input: SendCotacaoEmailInput,
   recipients: { to: string[]; cc: string[] }
@@ -742,10 +656,19 @@ export async function sendPerformanceQueueNotificationEmail(
     auth: { user, pass },
   });
 
-  const briefingLinhas = extrairBriefingLinhas(input.observacoes);
-  const assunto = `Cotação - ${input.clienteNome} (${input.cotacaoId})`;
+  const briefingLinhas = montarLinhasBriefingObservacoes(input.observacoes);
+  const temProgramaticaOuMensageria =
+    input.definicaoCampanha.includes('PROGRAMATICA') ||
+    input.definicaoCampanha.includes('WHATSAPP_SMS_PUSH');
+  const ehHibridoPerformanceMidia =
+    input.definicaoCampanha.includes('PERFORMANCE') && temProgramaticaOuMensageria;
+  const assunto = ehHibridoPerformanceMidia
+    ? `Cotação híbrida (performance + mídia) - ${input.clienteNome} (${input.cotacaoId})`
+    : `Cotação - ${input.clienteNome} (${input.cotacaoId})`;
   const corpoTexto = [
-    'Nova cotação de PERFORMANCE entrou na fila interna para decisão.',
+    ehHibridoPerformanceMidia
+      ? 'Nova cotação HÍBRIDA (performance + programática/mensageria): a parte de performance entrou na fila interna; a parte tabulada segue abaixo e nos anexos (quando gerados).'
+      : 'Nova cotação de PERFORMANCE entrou na fila interna para decisão.',
     '',
     `ID: ${input.cotacaoId}`,
     `Cliente: ${input.clienteNome}`,
@@ -756,20 +679,56 @@ export async function sendPerformanceQueueNotificationEmail(
     `Solicitante: ${input.solicitanteNome || 'Não informado'} (${input.solicitanteEmail || 'Não informado'})`,
     '',
     'Briefing preenchido:',
-    ...(briefingLinhas.length > 0
-      ? briefingLinhas.map((row) => `- ${row.label}: ${row.value}`)
-      : ['- Sem detalhes estruturados disponíveis']),
+    ...briefingLinhas.map((row) => `- ${row.label}: ${row.value}`),
+    ...(ehHibridoPerformanceMidia
+      ? [
+          '',
+          'Plano programático / mensageria (tabulado na ferramenta — sem linhas CPL/CPI de performance):',
+          buildPlanoTextoSomenteProgramatico(input),
+        ]
+      : []),
     '',
     `Link interno: ${process.env.NEXT_PUBLIC_APP_URL || ''}/admin/performance-fila/${input.cotacaoId}`,
     '',
     'A decisão final deve ser registrada no sistema.',
   ].join('\n');
 
+  const secaoPlanoHibridoHtml = ehHibridoPerformanceMidia
+    ? `
+      <div style="margin:16px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;">
+        <p style="margin:0 0 8px 0;color:#374151;font-size:14px;">
+          <strong>Performance (ex.: CPL/CPI):</strong> o plano nesse modelo depende de respostas e da validação interna;
+          ele não aparece como tabela fechada neste e-mail.
+        </p>
+        <p style="margin:0;color:#374151;font-size:14px;">
+          <strong>Programática / mensageria:</strong> abaixo, o plano já dimensionado na ferramenta (sem linhas CPL/CPI de performance).
+        </p>
+      </div>
+      <h3 style="margin:14px 0 8px 0;color:#1f2937;">Plano de mídia — programática / mensageria</h3>
+      <table style="border-collapse:collapse;width:100%;max-width:980px;margin-bottom:12px;">
+        <thead>
+          <tr>
+            <th style="padding:8px 10px;border:1px solid #d1d5db;background:#1f2937;color:#fff;text-align:left;">Canal</th>
+            <th style="padding:8px 10px;border:1px solid #d1d5db;background:#1f2937;color:#fff;text-align:right;">%</th>
+            <th style="padding:8px 10px;border:1px solid #d1d5db;background:#1f2937;color:#fff;text-align:right;">Budget</th>
+            <th style="padding:8px 10px;border:1px solid #d1d5db;background:#1f2937;color:#fff;text-align:left;">Modelo</th>
+            <th style="padding:8px 10px;border:1px solid #d1d5db;background:#1f2937;color:#fff;text-align:right;">Preço Unit.</th>
+            <th style="padding:8px 10px;border:1px solid #d1d5db;background:#1f2937;color:#fff;text-align:left;">Entrega Estimada</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${buildPlanoRowsSomenteProgramatico(input)}
+        </tbody>
+      </table>
+    `
+    : '';
+
   const corpoHtml = `
     <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.5;">
-      <h2 style="margin:0 0 8px 0;">Nova cotação de performance na fila</h2>
+      <h2 style="margin:0 0 8px 0;">${ehHibridoPerformanceMidia ? 'Nova cotação híbrida na fila (performance + mídia)' : 'Nova cotação de performance na fila'}</h2>
       <p style="margin:0 0 12px 0;color:#4b5563;">
         A cotação <strong>${escapeHtml(input.cotacaoId)}</strong> entrou em <strong>AGUARDANDO_APROVACAO</strong>.
+        ${ehHibridoPerformanceMidia ? ' Há também veiculação programática ou mensageria com plano tabulado.' : ''}
       </p>
       <table style="border-collapse:collapse;width:100%;max-width:900px;">
         <tbody>
@@ -781,24 +740,13 @@ export async function sendPerformanceQueueNotificationEmail(
           <tr><td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">Solicitante</td><td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(input.solicitanteNome || 'Não informado')} (${escapeHtml(input.solicitanteEmail || 'Não informado')})</td></tr>
         </tbody>
       </table>
-      <h3 style="margin:14px 0 8px 0;color:#1f2937;">Briefing preenchido</h3>
+      <h3 style="margin:14px 0 8px 0;color:#1f2937;">Briefing preenchido (espelho completo)</h3>
       <table style="border-collapse:collapse;width:100%;max-width:980px;">
         <tbody>
-          ${(briefingLinhas.length > 0
-            ? briefingLinhas
-            : [{ label: 'Briefing', value: 'Sem detalhes estruturados disponíveis.' }]
-          )
-            .map(
-              (row) => `
-                <tr>
-                  <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;width:260px;">${escapeHtml(row.label)}</td>
-                  <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(row.value)}</td>
-                </tr>
-              `
-            )
-            .join('')}
+          ${briefingLinhasParaHtmlTabela(briefingLinhas)}
         </tbody>
       </table>
+      ${secaoPlanoHibridoHtml}
       <p style="margin-top:14px;">
         <a href="${escapeHtml(`${process.env.NEXT_PUBLIC_APP_URL || ''}/admin/performance-fila/${input.cotacaoId}`)}">Abrir decisão no sistema</a>
       </p>
@@ -812,6 +760,10 @@ export async function sendPerformanceQueueNotificationEmail(
     subject: assunto,
     text: corpoTexto,
     html: corpoHtml,
+    attachments:
+      input.attachments && input.attachments.length > 0
+        ? input.attachments.map((item) => ({ filename: item.filename, path: item.path }))
+        : undefined,
   });
   return { messageId: info.messageId };
 }
@@ -848,7 +800,7 @@ export async function sendPerformanceFinalDecisionEmail(
   const precoFinalResumo = extrairResumoPrecoFinal(input.observacoes) || 'Conforme validação interna';
   const assunto = `Cotação - ${input.clienteNome} (${input.cotacaoId})`;
   const divider = '------------------------------------------------------------';
-  const briefingLinhas = extrairBriefingLinhas(input.observacoes);
+  const briefingLinhas = montarLinhasBriefingObservacoes(input.observacoes);
   const corpoTexto = [
     `Olá, tudo bem?`,
     '',
@@ -889,22 +841,10 @@ export async function sendPerformanceFinalDecisionEmail(
         </tbody>
       </table>
       <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb;" />
-      <h3 style="margin:0 0 8px 0;">Briefing preenchido</h3>
+      <h3 style="margin:0 0 8px 0;">Espelho completo do formulário</h3>
       <table style="border-collapse:collapse;width:100%;max-width:980px;">
         <tbody>
-          ${(briefingLinhas.length > 0
-            ? briefingLinhas
-            : [{ label: 'Briefing', value: 'Sem detalhes estruturados disponíveis.' }]
-          )
-            .map(
-              (row) => `
-                <tr>
-                  <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;width:260px;">${escapeHtml(row.label)}</td>
-                  <td style="padding:8px;border:1px solid #e5e7eb;">${escapeHtml(row.value)}</td>
-                </tr>
-              `
-            )
-            .join('')}
+          ${briefingLinhasParaHtmlTabela(briefingLinhas)}
         </tbody>
       </table>
     </div>

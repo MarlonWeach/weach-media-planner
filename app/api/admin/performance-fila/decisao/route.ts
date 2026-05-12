@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, usuarioTemRole } from '@/lib/utils/auth';
 import { gerarBriefingPDF } from '@/lib/pdf/geradorBriefingPDF';
+import { montarLinhasBriefingObservacoes } from '@/lib/cotacao/briefingLinhas';
 import {
   resolveCotacaoFinalDecisionRecipients,
   sendPerformanceFinalDecisionEmail,
@@ -199,6 +200,7 @@ export async function POST(request: NextRequest) {
         solicitanteEmail: cotacao.solicitanteEmail || 'Não informado',
         agenciaNome: cotacao.agenciaNome || 'Não informada',
         observacoesGerais: extrairObservacoesGeraisTexto(cotacao.observacoes),
+        linhasEspelho: montarLinhasBriefingObservacoes(cotacao.observacoes),
       },
       briefingPdfPath
     );

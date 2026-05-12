@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit/js/pdfkit.standalone';
 import fs from 'fs';
+import type { BriefingLinha } from '@/lib/cotacao/briefingLinhas';
 
 type PDFKitDocument = InstanceType<typeof PDFDocument>;
 
@@ -10,7 +11,7 @@ const CORES = {
   GRAY_LIGHT: '#F2F2F4',
 };
 
-interface DadosBriefingPDF {
+export interface DadosBriefingPDF {
   cotacaoId: string;
   clienteNome: string;
   clienteSegmento: string;
@@ -23,6 +24,8 @@ interface DadosBriefingPDF {
   solicitanteEmail: string;
   agenciaNome: string;
   observacoesGerais: string;
+  /** Quando informado, inclui o espelho completo do wizard (perguntas e respostas). */
+  linhasEspelho?: BriefingLinha[];
 }
 
 function safe(value: string | undefined | null, fallback = 'Não informado'): string {
@@ -74,51 +77,80 @@ export async function gerarBriefingPDF(
         .stroke();
       doc.moveDown(0.8);
 
-      const rows: Array<[string, string]> = [
-        ['ID da Cotação', safe(dados.cotacaoId)],
-        ['Nome do Anunciante / Campanha', safe(dados.clienteNome)],
-        ['Segmento', safe(dados.clienteSegmento)],
-        ['Objetivo', safe(dados.objetivo)],
-        ['Budget', formatarMoeda(dados.budget)],
-        ['Região', safe(dados.regiao)],
-        [
-          'Definição de Campanha',
-          dados.definicaoCampanha.length > 0 ? dados.definicaoCampanha.join(', ') : 'Não informada',
-        ],
-        ['Cotação é pró-ativa?', dados.cotacaoProativa ? 'Sim' : 'Não'],
-        ['Solicitante', safe(dados.solicitanteNome)],
-        ['E-mail do Solicitante', safe(dados.solicitanteEmail)],
-        ['Agência', safe(dados.agenciaNome, 'Não informada')],
-        ['Observações Gerais', safe(dados.observacoesGerais, 'Sem observações.')],
-      ];
-
       const startX = 40;
       const widthLabel = 200;
       const widthValue = 315;
-      let currentY = doc.y;
+      const padX = 6;
+      const padY = 6;
 
-      rows.forEach(([label, value], index) => {
-        garantirEspaco(doc, 28);
-        currentY = doc.y;
+      const linhasCompletas: Array<[string, string]> =
+        dados.linhasEspelho && dados.linhasEspelho.length > 0
+          ? [
+              ['ID da Cotação', safe(dados.cotacaoId)],
+              ['Budget (valor na cotação)', formatarMoeda(dados.budget)],
+              ['Região (valor na cotação)', safe(dados.regiao)],
+              ...dados.linhasEspelho.map((l) => [l.label, l.value] as [string, string]),
+            ]
+          : [
+              ['ID da Cotação', safe(dados.cotacaoId)],
+              ['Nome do Anunciante / Campanha', safe(dados.clienteNome)],
+              ['Segmento', safe(dados.clienteSegmento)],
+              ['Objetivo', safe(dados.objetivo)],
+              ['Budget', formatarMoeda(dados.budget)],
+              ['Região', safe(dados.regiao)],
+              [
+                'Definição de Campanha',
+                dados.definicaoCampanha.length > 0
+                  ? dados.definicaoCampanha.join(', ')
+                  : 'Não informada',
+              ],
+              ['Cotação é pró-ativa?', dados.cotacaoProativa ? 'Sim' : 'Não'],
+              ['Solicitante', safe(dados.solicitanteNome)],
+              ['E-mail do Solicitante', safe(dados.solicitanteEmail)],
+              ['Agência', safe(dados.agenciaNome, 'Não informada')],
+              ['Observações Gerais', safe(dados.observacoesGerais, 'Sem observações.')],
+            ];
+
+      linhasCompletas.forEach(([label, value], index) => {
+        doc.font('Helvetica-Bold').fontSize(9);
+        const hLabel = doc.heightOfString(label, { width: widthLabel - 2 * padX });
+        doc.font('Helvetica').fontSize(9);
+        const hVal = doc.heightOfString(value, {
+          width: widthValue - 2 * padX,
+          lineGap: 2,
+        });
+        const rowH = Math.max(28, hLabel + padY * 2, hVal + padY * 2);
+
+        garantirEspaco(doc, rowH + 8);
+        const currentY = doc.y;
         const bgColor = index % 2 === 0 ? CORES.GRAY_LIGHT : '#FFFFFF';
 
-        doc.rect(startX, currentY, widthLabel, 24).fillColor(bgColor).fill();
-        doc.rect(startX + widthLabel, currentY, widthValue, 24).fillColor(bgColor).fill();
-        doc.rect(startX, currentY, widthLabel + widthValue, 24).lineWidth(0.5).strokeColor('#D1D5DB').stroke();
+        doc.rect(startX, currentY, widthLabel, rowH).fillColor(bgColor).fill();
+        doc.rect(startX + widthLabel, currentY, widthValue, rowH).fillColor(bgColor).fill();
+        doc
+          .rect(startX, currentY, widthLabel + widthValue, rowH)
+          .lineWidth(0.5)
+          .strokeColor('#D1D5DB')
+          .stroke();
 
         doc
           .fontSize(9)
           .fillColor('#111827')
           .font('Helvetica-Bold')
-          .text(label, startX + 6, currentY + 7, { width: widthLabel - 12, ellipsis: true });
+          .text(label, startX + padX, currentY + padY, {
+            width: widthLabel - 2 * padX,
+          });
 
         doc
           .fontSize(9)
           .fillColor('#111827')
           .font('Helvetica')
-          .text(value, startX + widthLabel + 6, currentY + 7, { width: widthValue - 12, ellipsis: true });
+          .text(value, startX + widthLabel + padX, currentY + padY, {
+            width: widthValue - 2 * padX,
+            lineGap: 2,
+          });
 
-        doc.y = currentY + 24;
+        doc.y = currentY + rowH;
       });
 
       doc.moveDown(0.8);

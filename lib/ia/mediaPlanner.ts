@@ -50,6 +50,9 @@ export interface RespostaDistribuicaoFormato {
   racional?: string;
 }
 
+const FORMATO_CPM_DISPLAY_NATIVE = 'cpm - display e/ou native';
+const FORMATO_CPM_GAMA_DSP = 'cpm - gama dsp';
+
 /**
  * Gera mix de mídia usando IA
  */
@@ -341,7 +344,7 @@ export async function gerarDistribuicaoBudgetPorFormato(
       }));
 
     return {
-      formatos: alocados,
+      formatos: aplicarRegraPesoDisplayMaiorQueGama(alocados),
       origem: 'ia',
       racional: typeof bruto.racional === 'string' ? bruto.racional : undefined,
     };
@@ -368,7 +371,8 @@ CAMPANHA: segmento ${params.segmento}, objetivo ${params.objetivo}, orçamento R
 FORMATOS (cada um deve receber um %):
 ${linhas.join('\n')}
 
-Considere coerência entre objetivo, modelo de compra (CPM, CPV, CPL, etc.) e o tipo de mídia. Dê pesos DIFERENTES entre as linhas (evite 50/50 ou divisão igual) quando fizer sentido.`;
+Considere coerência entre objetivo, modelo de compra (CPM, CPV, CPL, etc.) e o tipo de mídia. Dê pesos DIFERENTES entre as linhas (evite 50/50 ou divisão igual) quando fizer sentido.
+REGRA OBRIGATÓRIA ADICIONAL: quando existir "CPM - Display e/ou Native" e "CPM - Gama DSP", o percentual de "CPM - Display e/ou Native" deve ser sempre maior.`;
 }
 
 function obterChavePesoModelo(modeloCompra: string): string {
@@ -423,6 +427,63 @@ function pesoHeuristicoModeloEObjetivo(
   return base * multiplicadorObjetivoParaChavePeso(objetivo, chavePeso);
 }
 
+function normalizarFormatoComparacao(formato: string): string {
+  return String(formato || '').trim().toLowerCase();
+}
+
+/**
+ * Regra comercial fixa:
+ * "CPM - Display e/ou Native" precisa ter percentual maior que "CPM - Gama DSP".
+ */
+function aplicarRegraPesoDisplayMaiorQueGama(
+  formatos: Array<FormatoPlanoEntrada & { percentual: number }>
+): Array<FormatoPlanoEntrada & { percentual: number }> {
+  const displayIndices = formatos
+    .map((item, index) =>
+      normalizarFormatoComparacao(item.formato) === FORMATO_CPM_DISPLAY_NATIVE ? index : -1
+    )
+    .filter((index) => index >= 0);
+  const gamaIndices = formatos
+    .map((item, index) =>
+      normalizarFormatoComparacao(item.formato) === FORMATO_CPM_GAMA_DSP ? index : -1
+    )
+    .filter((index) => index >= 0);
+
+  if (displayIndices.length === 0 || gamaIndices.length === 0) {
+    return formatos;
+  }
+
+  const minDisplay = Math.min(...displayIndices.map((index) => formatos[index].percentual));
+  const maxGama = Math.max(...gamaIndices.map((index) => formatos[index].percentual));
+  const minimoDelta = 0.01;
+  const ajusteNecessario = maxGama + minimoDelta - minDisplay;
+
+  if (ajusteNecessario <= 0) {
+    return formatos;
+  }
+
+  const result = formatos.map((item) => ({ ...item }));
+  const totalGama = gamaIndices.reduce((acc, index) => acc + result[index].percentual, 0);
+  if (totalGama <= 0) {
+    return result;
+  }
+
+  for (const index of gamaIndices) {
+    const proporcao = result[index].percentual / totalGama;
+    result[index].percentual = Math.max(0, result[index].percentual - ajusteNecessario * proporcao);
+  }
+  const aumentoPorLinhaDisplay = ajusteNecessario / displayIndices.length;
+  for (const index of displayIndices) {
+    result[index].percentual += aumentoPorLinhaDisplay;
+  }
+
+  const soma = result.reduce((acc, item) => acc + item.percentual, 0);
+  if (soma > 0) {
+    return result.map((item) => ({ ...item, percentual: (item.percentual / soma) * 100 }));
+  }
+  return result;
+}
+
 function distribuicaoFormatosFallbackDeterministico(params: {
   objetivo: string;
   formatos: FormatoPlanoEntrada[];
@@ -462,9 +523,10 @@ export function aplicarPesosENormalizar(
     }));
   }
 
-  return formatos.map((f, i) => ({
+  const distribuicaoBase = formatos.map((f, i) => ({
     ...f,
     percentual: (pesos[i] / somaPesos) * 100,
   }));
+  return aplicarRegraPesoDisplayMaiorQueGama(distribuicaoBase);
 }
 

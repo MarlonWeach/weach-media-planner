@@ -491,6 +491,13 @@ function formatarSegmento(segmento: string): string {
     EDUCACAO: 'Educação',
     TELECOM: 'Telecom',
     SERVICOS: 'Serviços',
+    CPG_BENS_CONSUMO: 'CPG / Bens de consumo',
+    PROMOCAO: 'Promoção',
+    SAAS: 'SaaS',
+    B2B: 'B2B',
+    AGRO: 'Agro',
+    TURISMO: 'Turismo',
+    BELEZA_SAUDE: 'Beleza e saúde',
     OUTROS: 'Outros',
   };
   return nomes[segmento] || segmento;

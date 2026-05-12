@@ -70,6 +70,7 @@ export default function EditarCotacaoPage({
       const cotacao = data.cotacao;
       const observacoesPayload = extrairPayloadObservacoes(cotacao.observacoes);
       const estrategia = observacoesPayload?.estrategia;
+      const step3Inicial = inferirStep3Inicial(cotacao, observacoesPayload);
 
       // Determina em qual passo está baseado nos dados preenchidos
       if (cotacao.mixSugerido && Object.keys(cotacao.mixSugerido).length > 0) {
@@ -81,15 +82,6 @@ export default function EditarCotacaoPage({
       } else {
         setCurrentStep(1);
       }
-
-      const dataInicioStr =
-        typeof cotacao.dataInicio === 'string'
-          ? cotacao.dataInicio.split('T')[0]
-          : dayjs(cotacao.dataInicio).format('YYYY-MM-DD');
-      const dataFimStr =
-        typeof cotacao.dataFim === 'string'
-          ? cotacao.dataFim.split('T')[0]
-          : dayjs(cotacao.dataFim).format('YYYY-MM-DD');
 
       // Preenche dados dos passos (formato alinhado a Step1/2/3)
       setWizardData({
@@ -132,10 +124,12 @@ export default function EditarCotacaoPage({
           risco: cotacao.risco,
         } as Step2Data,
         step3: {
-          budget: Number(cotacao.budget),
-          dataInicio: dataInicioStr,
-          dataFim: dataFimStr,
-          tipoRegiao: 'NACIONAL',
+          budget: step3Inicial.budget,
+          dataInicio: step3Inicial.dataInicio,
+          dataFim: step3Inicial.dataFim,
+          tipoRegiao: step3Inicial.tipoRegiao,
+          estadosSelecionados: step3Inicial.estadosSelecionados,
+          cidades: step3Inicial.cidades,
         } as Step3Data,
       });
 
@@ -160,6 +154,52 @@ export default function EditarCotacaoPage({
     } catch {
       return null;
     }
+  };
+
+  const inferirStep3Inicial = (cotacao: any, observacoesPayload: any): Step3Data => {
+    const cobertura = observacoesPayload?.cobertura;
+    const regiaoBanco = String(cotacao?.regiao || '');
+    const estadosObservacao = Array.isArray(cobertura?.estadosSelecionados)
+      ? cobertura.estadosSelecionados.map((item: unknown) => String(item).trim()).filter(Boolean)
+      : [];
+    const cidadesObservacao = typeof cobertura?.cidades === 'string' ? cobertura.cidades : '';
+
+    let tipoRegiao: Step3Data['tipoRegiao'] = 'NACIONAL';
+    let estadosSelecionados: string[] = [];
+    let cidades = '';
+
+    if (regiaoBanco === 'NACIONAL') {
+      tipoRegiao = 'NACIONAL';
+    } else if (regiaoBanco === 'SP_CAPITAL') {
+      if (cobertura?.tipoRegiao === 'CIDADES' && cidadesObservacao.trim()) {
+        tipoRegiao = 'CIDADES';
+        cidades = cidadesObservacao;
+      } else {
+        tipoRegiao = 'ESTADO';
+        estadosSelecionados = ['SP'];
+      }
+    } else if (regiaoBanco === 'CIDADES_MENORES') {
+      tipoRegiao = 'CIDADES';
+      cidades = cidadesObservacao || '';
+    } else if (estadosObservacao.length > 0) {
+      tipoRegiao = 'ESTADO';
+      estadosSelecionados = estadosObservacao;
+    }
+
+    return {
+      budget: Number(cotacao.budget),
+      dataInicio:
+        typeof cotacao.dataInicio === 'string'
+          ? cotacao.dataInicio.split('T')[0]
+          : dayjs(cotacao.dataInicio).format('YYYY-MM-DD'),
+      dataFim:
+        typeof cotacao.dataFim === 'string'
+          ? cotacao.dataFim.split('T')[0]
+          : dayjs(cotacao.dataFim).format('YYYY-MM-DD'),
+      tipoRegiao,
+      estadosSelecionados,
+      cidades,
+    };
   };
 
   const handleStep1Submit = (data: Step1Data) => {

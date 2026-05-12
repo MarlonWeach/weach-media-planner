@@ -13,6 +13,7 @@ import { validarPlanoMidia } from '@/lib/ia/validator';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
 import { obterProximoNumeroSequencialCotacao } from '@/lib/cotacao/sequencial';
 import type { Prisma } from '@prisma/client';
+import { zSegmentoCotacao } from '@/lib/cotacao/segmentosCotacao';
 
 const CANAIS_VALIDOS = [
   'DISPLAY_PROGRAMATICO',
@@ -74,7 +75,7 @@ function filtrarERenormalizarMix(
 
 const schemaCriarCotacao = z.object({
   clienteNome: z.string().min(1),
-  clienteSegmento: z.enum(['AUTOMOTIVO', 'FINANCEIRO', 'VAREJO', 'IMOBILIARIO', 'SAUDE', 'EDUCACAO', 'TELECOM', 'SERVICOS', 'OUTROS']),
+  clienteSegmento: zSegmentoCotacao,
   urlLp: z.string().url(),
   solicitanteId: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
@@ -118,6 +119,22 @@ const schemaCriarCotacao = z.object({
     .optional(),
 });
 
+function extrairDefinicaoCampanhaObservacoes(
+  observacoes: string | undefined
+): string[] {
+  if (!observacoes) return [];
+  try {
+    const payload = JSON.parse(observacoes) as {
+      estrategia?: { definicaoCampanha?: string[] };
+    };
+    return Array.isArray(payload?.estrategia?.definicaoCampanha)
+      ? payload.estrategia!.definicaoCampanha!
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const startMs = Date.now();
@@ -131,6 +148,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const dados = schemaCriarCotacao.parse(body);
+
+    const definicaoCampanha = extrairDefinicaoCampanhaObservacoes(dados.observacoes);
+    if (definicaoCampanha.length > 1) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Não é permitido combinar tipos de campanha na mesma cotação. Selecione apenas um tipo (Performance, Programática ou WhatsApp/SMS/PUSH).',
+        },
+        { status: 400 }
+      );
+    }
 
     // TODO: Buscar CPM base do banco (configuração)
     // Por enquanto, usando valor padrão

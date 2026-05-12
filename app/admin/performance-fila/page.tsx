@@ -175,7 +175,15 @@ export default function AdminPerformanceFilaPage() {
                       Vendedor: {item.vendedorNome} ({item.vendedorEmail})
                     </p>
                     <p className="text-xs text-gray-500">
-                      Campanha: {item.definicaoCampanha.length > 0 ? item.definicaoCampanha.join(', ') : 'N/A'}
+                      {(() => {
+                        const defs = item.definicaoCampanha || [];
+                        const comMidia =
+                          defs.includes('PROGRAMATICA') || defs.includes('WHATSAPP_SMS_PUSH');
+                        if (comMidia) {
+                          return 'Inclui programática ou mensageria — nesta fila decida apenas performance (CPL/CPI).';
+                        }
+                        return 'Cotação de performance.';
+                      })()}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

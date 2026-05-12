@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { ehCanalMixPerformanceFila } from '@/lib/performance/historico';
 
 type OrigemDecisao = 'REVISAO' | 'EXCECAO';
 
@@ -27,6 +28,7 @@ interface CotacaoResponse {
     objetivo: string;
     budget: number;
     status: string;
+    observacoes?: string | null;
     mixSugerido: unknown;
     logsPreco?: Array<{
       id: string;
@@ -95,6 +97,8 @@ export default function AdminPerformanceDecisionPage({
     budget: number;
     status: string;
   } | null>(null);
+  /** Quando a cotação também tem programática/mensageria; esta tela decide só performance. */
+  const [cotacaoComMidiaAlemDePerformance, setCotacaoComMidiaAlemDePerformance] = useState(false);
   const [registros, setRegistros] = useState<RegistroPerformance[]>([]);
   const [logsAuditoria, setLogsAuditoria] = useState<
     Array<{
@@ -140,10 +144,31 @@ export default function AdminPerformanceDecisionPage({
       const historicoRegistros =
         historicoResp.ok && historicoData.success ? historicoData.registros || [] : [];
 
-      let registrosNormalizados = dedupeByKey(historicoRegistros);
+      let registrosNormalizados = dedupeByKey(
+        historicoRegistros.filter((row) => ehCanalMixPerformanceFila(row.canal))
+      );
+
+      let definicoesCampanha: string[] = [];
+      try {
+        const obs = cotacaoData.cotacao.observacoes;
+        if (typeof obs === 'string' && obs.trim().startsWith('{')) {
+          const payload = JSON.parse(obs) as { estrategia?: { definicaoCampanha?: string[] } };
+          definicoesCampanha = Array.isArray(payload?.estrategia?.definicaoCampanha)
+            ? payload.estrategia!.definicaoCampanha!
+            : [];
+        }
+      } catch {
+        definicoesCampanha = [];
+      }
+      const temMidiaAlemPerformance =
+        definicoesCampanha.includes('PROGRAMATICA') ||
+        definicoesCampanha.includes('WHATSAPP_SMS_PUSH');
+      setCotacaoComMidiaAlemDePerformance(temMidiaAlemPerformance);
 
       if (registrosNormalizados.length === 0) {
-        const fallbackRows = asArrayMix(cotacaoData.cotacao.mixSugerido).map((item) => ({
+        const fallbackRows = asArrayMix(cotacaoData.cotacao.mixSugerido)
+          .filter((item) => ehCanalMixPerformanceFila(String(item.canal || '')))
+          .map((item) => ({
           cotacaoId: cotacaoData.cotacao.id,
           canal: String(item.canal || ''),
           formato: String(item.formato || ''),
@@ -351,8 +376,19 @@ export default function AdminPerformanceDecisionPage({
         {erro && <div className="p-3 rounded bg-red-50 text-red-700 border border-red-200">{erro}</div>}
         {sucesso && <div className="p-3 rounded bg-green-50 text-green-700 border border-green-200">{sucesso}</div>}
 
+        {cotacaoComMidiaAlemDePerformance && (
+          <div className="p-4 rounded-lg border border-blue-200 bg-blue-50 text-sm text-blue-950">
+            <p className="font-semibold mb-1">Escopo desta tela: somente performance</p>
+            <p>
+              Esta cotação também inclui programática ou mensageria. Aqui você decide apenas preço e racional da
+              linha de performance (CPL/CPI). O plano programático foi tratado no fluxo operacional e não deve
+              constar neste formulário.
+            </p>
+          </div>
+        )}
+
         <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
-          <h2 className="text-xl font-semibold">Itens para decisão</h2>
+          <h2 className="text-xl font-semibold">Itens para decisão (performance)</h2>
           {registros.length === 0 ? (
             <div className="text-sm text-gray-500">
               Nenhum item encontrado para registrar decisão nesta cotação.

@@ -5,7 +5,24 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
 
 const canais = ['DISPLAY_PROGRAMATICO', 'VIDEO_PROGRAMATICO', 'CTV', 'AUDIO_DIGITAL', 'SOCIAL_PROGRAMATICO', 'CRM_MEDIA', 'IN_LIVE', 'CPL_CPI'] as const;
-const segmentos = ['AUTOMOTIVO', 'FINANCEIRO', 'VAREJO', 'IMOBILIARIO', 'SAUDE', 'EDUCACAO', 'TELECOM', 'SERVICOS', 'OUTROS'] as const;
+const segmentos = [
+  'AUTOMOTIVO',
+  'FINANCEIRO',
+  'VAREJO',
+  'IMOBILIARIO',
+  'SAUDE',
+  'EDUCACAO',
+  'TELECOM',
+  'SERVICOS',
+  'CPG_BENS_CONSUMO',
+  'PROMOCAO',
+  'SAAS',
+  'B2B',
+  'AGRO',
+  'TURISMO',
+  'BELEZA_SAUDE',
+  'OUTROS',
+] as const;
 const regioes = ['NACIONAL', 'SP_CAPITAL', 'SUDESTE_EXCETO_SP', 'SUL', 'CENTRO_OESTE', 'NORDESTE', 'NORTE', 'CIDADES_MENORES'] as const;
 const modelos = ['CPM', 'CPC', 'CPV', 'CPCL', 'CPL', 'CPI', 'CPD', 'PACOTE'] as const;
 const canalLabels: Record<string, string> = {

@@ -1,3 +1,10 @@
+/** Canais do mix que entram na fila e no histórico de decisão de performance (não inclui mídia programática). */
+export const CANAIS_MIX_PERFORMANCE_FILA = new Set(['CPL_CPI']);
+
+export function ehCanalMixPerformanceFila(canal: string): boolean {
+  return CANAIS_MIX_PERFORMANCE_FILA.has(String(canal || '').trim().toUpperCase());
+}
+
 export interface HistoricoPerformanceRegistro {
   canal: string;
   formato: string;
@@ -31,7 +38,13 @@ function parseJsonSeguro(raw: string | null | undefined): ObservacoesPayload {
     if (parsed && typeof parsed === 'object') return parsed;
     return {};
   } catch {
-    return {};
+    const trimmed = raw.trim();
+    if (!trimmed) return {};
+    return {
+      solicitacao: {
+        observacoesGerais: trimmed,
+      },
+    } as ObservacoesPayload;
   }
 }
 
@@ -101,6 +114,7 @@ export function extrairHistoricoPerformance(
     ? historico.registros
         .map((item) => normalizarRegistro(item))
         .filter((item): item is HistoricoPerformanceRegistro => item !== null)
+        .filter((item) => ehCanalMixPerformanceFila(item.canal))
     : [];
 
   return {
@@ -174,6 +188,7 @@ export function sincronizarHistoricoComMixStep4(params: {
   );
 
   const registrosSincronizados = params.mix
+    .filter((item) => ehCanalMixPerformanceFila(normalizarTexto(item.canal)))
     .map((item) => {
       const canal = normalizarTexto(item.canal);
       const formato = normalizarTexto(item.formato);

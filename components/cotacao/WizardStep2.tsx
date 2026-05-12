@@ -93,7 +93,10 @@ const schemaStep2 = z.object({
       (value) => ['AWARENESS', 'CONSIDERACAO', 'LEADS', 'VENDAS'].includes(value),
       'Selecione o objetivo da campanha'
     ) as z.ZodType<'AWARENESS' | 'CONSIDERACAO' | 'LEADS' | 'VENDAS'>,
-  definicaoCampanha: z.array(z.enum(['PERFORMANCE', 'PROGRAMATICA', 'WHATSAPP_SMS_PUSH'])).min(1, 'Selecione ao menos uma definição de campanha'),
+  definicaoCampanha: z
+    .array(z.enum(['PERFORMANCE', 'PROGRAMATICA', 'WHATSAPP_SMS_PUSH']))
+    .min(1, 'Selecione ao menos uma definição de campanha')
+    .max(1, 'Não é permitido combinar tipos de campanha na mesma cotação'),
   servicosMensageria: z.array(z.enum(['SMS_CPD', 'WHATSAPP_CPD', 'PUSH_CPC'])).optional(),
   modelosPerformance: z.array(z.enum(['CPL_LEAD', 'CPI_APP', 'CLIQUE_DUPLO', 'CPA', 'OUTRO'])).optional(),
   modeloPerformanceOutro: z.string().optional(),
@@ -160,12 +163,32 @@ export function WizardStep2({
   const cplExigiuFiltro = watch('cplExigiuFiltro');
   const veiculaOutrasRedes = watch('veiculaOutrasRedes');
   const clienteSugeriuValor = watch('clienteSugeriuValor');
-  const cplExigiuFiltroSelecionado = cplExigiuFiltro === true;
-  const clienteSugeriuValorSelecionado = clienteSugeriuValor === true;
+  /** Radios enviam string até o resolver; `watch` reflete o valor bruto. */
+  const radioMarcadoSim = (valor: unknown) => valor === true || valor === 'true';
+  const cplExigiuFiltroSelecionado = radioMarcadoSim(cplExigiuFiltro);
+  const clienteSugeriuValorSelecionado = radioMarcadoSim(clienteSugeriuValor);
   const objetivoSelecionado = watch('objetivo');
   const podeAvancar = !!objetivoSelecionado && definicaoCampanha.length > 0;
 
   const toggleItemArray = (field: 'definicaoCampanha' | 'servicosMensageria' | 'modelosPerformance' | 'modelosProgramatica', value: string) => {
+    if (field === 'definicaoCampanha') {
+      const valoresAtuais = (watch('definicaoCampanha') as string[] | undefined) || [];
+      const novoValor = valoresAtuais.includes(value) ? [] : [value];
+      setValue('definicaoCampanha', novoValor as any, { shouldValidate: false });
+
+      // Evita resíduos de outro tipo de campanha ao alternar o tipo.
+      if (value !== 'PERFORMANCE') {
+        setValue('modelosPerformance', [] as any, { shouldValidate: false });
+      }
+      if (value !== 'PROGRAMATICA') {
+        setValue('modelosProgramatica', [] as any, { shouldValidate: false });
+      }
+      if (value !== 'WHATSAPP_SMS_PUSH') {
+        setValue('servicosMensageria', [] as any, { shouldValidate: false });
+      }
+      return;
+    }
+
     const valoresAtuais = (watch(field) as string[] | undefined) || [];
     if (valoresAtuais.includes(value)) {
       setValue(field as any, valoresAtuais.filter((item) => item !== value), { shouldValidate: false });
@@ -224,6 +247,9 @@ export function WizardStep2({
         required
         error={errors.definicaoCampanha?.message}
       >
+        <p className="text-xs text-amber-700 mb-3">
+          Selecione apenas um tipo por cotação. Campanhas híbridas (ex.: performance + programática) não são permitidas.
+        </p>
         <div className="space-y-3">
           {definicoesCampanha.map((definicao) => (
             <label

@@ -123,6 +123,13 @@ export function CotacaoList({ userId }: CotacaoListProps) {
     { value: 'EDUCACAO', label: 'Educação' },
     { value: 'TELECOM', label: 'Telecom' },
     { value: 'SERVICOS', label: 'Serviços' },
+    { value: 'CPG_BENS_CONSUMO', label: 'CPG / Bens de consumo' },
+    { value: 'PROMOCAO', label: 'Promoção' },
+    { value: 'SAAS', label: 'SaaS' },
+    { value: 'B2B', label: 'B2B' },
+    { value: 'AGRO', label: 'Agro' },
+    { value: 'TURISMO', label: 'Turismo' },
+    { value: 'BELEZA_SAUDE', label: 'Beleza e saúde' },
     { value: 'OUTROS', label: 'Outros' },
   ];
 

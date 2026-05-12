@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
 import { sincronizarHistoricoComMixStep4 } from '@/lib/performance/historico';
 import { obterProximoNumeroSequencialCotacao } from '@/lib/cotacao/sequencial';
+import { mergeObservacoesComStep1 } from '@/lib/cotacao/observacoesMerge';
 
 const schemaRascunho = z.object({
   cotacaoId: z.string().uuid().optional(),
@@ -16,11 +17,18 @@ const schemaRascunho = z.object({
   step2: z.any().optional(),
   step3: z.any().optional(),
   step4: z.any().optional(),
+  /** JSON completo do briefing (passos 1–3); usado com step4 para não perder link de anexo etc. */
+  observacoesCompletas: z.string().optional(),
   vendedorId: z.string().uuid().optional(),
 });
 
 const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function possuiDefinicaoCampanhaHibrida(step2: any): boolean {
+  const definicao = Array.isArray(step2?.definicaoCampanha) ? step2.definicaoCampanha : [];
+  return definicao.length > 1;
+}
 
 function normalizarRegiao(step3: any): string {
   if (!step3?.tipoRegiao || step3.tipoRegiao === 'NACIONAL') {
@@ -118,7 +126,10 @@ export async function POST(request: NextRequest) {
         dadosAtualizacao.clienteNome = dados.step1.clienteNome;
         dadosAtualizacao.clienteSegmento = dados.step1.clienteSegmento;
         dadosAtualizacao.urlLp = dados.step1.urlLp;
-        dadosAtualizacao.observacoes = dados.step1.observacoes;
+        dadosAtualizacao.observacoes = mergeObservacoesComStep1(
+          cotacao.observacoes,
+          dados.step1 as Record<string, unknown>
+        );
         dadosAtualizacao.solicitanteId = relacionamentos.solicitanteId;
         dadosAtualizacao.solicitanteNome = relacionamentos.solicitanteNome;
         dadosAtualizacao.solicitanteEmail = relacionamentos.solicitanteEmail;
@@ -127,6 +138,16 @@ export async function POST(request: NextRequest) {
       }
 
       if (dados.step2) {
+        if (possuiDefinicaoCampanhaHibrida(dados.step2)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                'Não é permitido salvar cotação híbrida. Selecione apenas um tipo de campanha.',
+            },
+            { status: 400 }
+          );
+        }
         dadosAtualizacao.objetivo = dados.step2.objetivo;
         dadosAtualizacao.maturidadeDigital = dados.step2.maturidadeDigital;
         dadosAtualizacao.risco = dados.step2.risco;
@@ -145,8 +166,12 @@ export async function POST(request: NextRequest) {
         dadosAtualizacao.precosSugeridos = dados.step4.precos;
         dadosAtualizacao.estimativas = dados.step4.estimativas;
         if (Array.isArray(dados.step4.mix)) {
+          const observacoesBase =
+            typeof dados.observacoesCompletas === 'string' && dados.observacoesCompletas.trim()
+              ? dados.observacoesCompletas
+              : cotacao.observacoes;
           dadosAtualizacao.observacoes = sincronizarHistoricoComMixStep4({
-            observacoesAtual: cotacao.observacoes,
+            observacoesAtual: observacoesBase,
             mix: dados.step4.mix,
             userId,
           });
@@ -174,6 +199,17 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (dados.step2 && possuiDefinicaoCampanhaHibrida(dados.step2)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Não é permitido salvar cotação híbrida. Selecione apenas um tipo de campanha.',
+          },
+          { status: 400 }
+        );
+      }
+
       const relacionamentos = await normalizarRelacionamentosStep1(dados.step1);
 
       const numeroSequencial = await obterProximoNumeroSequencialCotacao();
@@ -195,7 +231,10 @@ export async function POST(request: NextRequest) {
           maturidadeDigital: dados.step2?.maturidadeDigital || 'MEDIA',
           risco: dados.step2?.risco || 'MEDIA',
           aceitaModeloHibrido: dados.step2?.aceitaModeloHibrido || false,
-          observacoes: dados.step1.observacoes,
+          observacoes: mergeObservacoesComStep1(
+            null,
+            dados.step1 as Record<string, unknown>
+          ),
           solicitanteId: relacionamentos.solicitanteId,
           solicitanteNome: relacionamentos.solicitanteNome,
           solicitanteEmail: relacionamentos.solicitanteEmail,

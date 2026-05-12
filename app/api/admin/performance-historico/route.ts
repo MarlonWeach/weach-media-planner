@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, usuarioTemRole } from '@/lib/utils/auth';
 import {
   atualizarObservacoesComHistoricoPerformance,
+  ehCanalMixPerformanceFila,
   extrairHistoricoPerformance,
   type HistoricoPerformanceRegistro,
 } from '@/lib/performance/historico';
@@ -159,6 +160,16 @@ export async function POST(request: NextRequest) {
     }
 
     const dados = parseResult.data;
+    if (!ehCanalMixPerformanceFila(dados.canal)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Esta rota aceita apenas linhas de performance (ex.: CPL/CPI). Canais programáticos não entram no histórico da fila de performance.',
+        },
+        { status: 400 }
+      );
+    }
     const cotacao = await prisma.wp_Cotacao.findUnique({
       where: { id: dados.cotacaoId },
       select: {

@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, podeAcessarCotacao } from '@/lib/utils/auth';
 import { gerarPDF } from '@/lib/pdf/geradorPDF';
 import { gerarBriefingPDF } from '@/lib/pdf/geradorBriefingPDF';
+import { montarLinhasBriefingObservacoes } from '@/lib/cotacao/briefingLinhas';
 import {
   resolveCotacaoInternalRecipients,
   resolveCotacaoEmailRecipients,
@@ -331,6 +332,11 @@ export async function POST(
     }
 
     const isPerformance = definicaoCampanha.includes('PERFORMANCE');
+    const temProgramaticaOuMensageria =
+      definicaoCampanha.includes('PROGRAMATICA') ||
+      definicaoCampanha.includes('WHATSAPP_SMS_PUSH');
+    /** Só performance (sem programática/mensageria): não gera PDF de plano; híbrido gera plano da parte tabulada. */
+    const apenasPerformance = isPerformance && !temProgramaticaOuMensageria;
     const statusJaProcessado = ['ENVIADA', 'AGUARDANDO_APROVACAO', 'APROVADA', 'RECUSADA'].includes(
       String(cotacao.status)
     );
@@ -351,7 +357,7 @@ export async function POST(
     let pdfPath = '';
     let pdfUrl: string | null = null;
 
-    if (!isPerformance) {
+    if (!apenasPerformance) {
       pdfFileName = `cotacao-${cotacaoId}-${nowTs}.pdf`;
       pdfPath = path.join(attachmentDir, pdfFileName);
       await gerarPDF(dadosPDF, pdfPath);
@@ -411,6 +417,7 @@ export async function POST(
             cotacao.solicitanteEmail || payloadObs?.solicitacao?.solicitanteEmail || 'Não informado',
           agenciaNome: cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || 'Não informada',
           observacoesGerais: extrairObservacoesGeraisTexto(cotacao.observacoes),
+          linhasEspelho: montarLinhasBriefingObservacoes(cotacao.observacoes),
         },
         briefingPdfPath
       );
@@ -435,12 +442,13 @@ export async function POST(
         mix: mixRows,
         precos,
         estimativas,
-        attachments: isPerformance
-          ? [{ path: briefingPdfPath, filename: briefingPdfFileName }]
-          : [
-              { path: pdfPath, filename: pdfFileName },
-              { path: briefingPdfPath, filename: briefingPdfFileName },
-            ],
+        attachments:
+          apenasPerformance
+            ? [{ path: briefingPdfPath, filename: briefingPdfFileName }]
+            : [
+                ...(pdfPath ? [{ path: pdfPath, filename: pdfFileName }] : []),
+                { path: briefingPdfPath, filename: briefingPdfFileName },
+              ],
       };
 
       if (isPerformance) {
@@ -499,21 +507,28 @@ export async function POST(
         }
       }
 
-      await syncCotacaoToGoogleSheets({
-        id: cotacao.id,
-        numeroSequencial: cotacao.numeroSequencial,
-        createdAt: cotacao.createdAt,
-        dataInicio: cotacao.dataInicio,
-        dataFim: cotacao.dataFim,
-        clienteNome: cotacao.clienteNome,
-        clienteSegmento: cotacao.clienteSegmento,
-        urlLp: cotacao.urlLp,
-        budget: Number(cotacao.budget),
-        solicitanteNome: cotacao.solicitanteNome,
-        solicitanteEmail: cotacao.solicitanteEmail,
-        agenciaNome: cotacao.agenciaNome,
-        observacoes: cotacao.observacoes,
-      });
+      try {
+        await syncCotacaoToGoogleSheets({
+          id: cotacao.id,
+          numeroSequencial: cotacao.numeroSequencial,
+          createdAt: cotacao.createdAt,
+          dataInicio: cotacao.dataInicio,
+          dataFim: cotacao.dataFim,
+          clienteNome: cotacao.clienteNome,
+          clienteSegmento: cotacao.clienteSegmento,
+          urlLp: cotacao.urlLp,
+          budget: Number(cotacao.budget),
+          solicitanteNome: cotacao.solicitanteNome,
+          solicitanteEmail: cotacao.solicitanteEmail,
+          agenciaNome: cotacao.agenciaNome,
+          observacoes: cotacao.observacoes,
+        });
+      } catch (sheetsError) {
+        console.error(
+          '[CotacaoSheets][erro-nao-bloqueante]',
+          JSON.stringify({ cotacaoId, erro: serializarErro(sheetsError) })
+        );
+      }
     } catch (dispatchError) {
       console.error(
         '[CotacaoDispatch][erro]',
@@ -523,7 +538,7 @@ export async function POST(
         {
           success: false,
           error:
-            'Falha no envio/sincronização da cotação. Revise SMTP, destinatários e integração Google Sheets.',
+            'Falha no envio da cotação (e-mail/PDF). Revise SMTP e destinatários. A sincronização com Google Sheets é registrada em log e pode ser retentada.',
           cotacaoId,
           pdfUrl,
         },
@@ -542,7 +557,9 @@ export async function POST(
       success: true,
       pdfUrl,
       message: isPerformance
-        ? 'Cotação de performance enviada para fila de aprovação interna.'
+        ? temProgramaticaOuMensageria
+          ? 'Cotação híbrida enviada: performance na fila interna; plano programático/mensageria anexo quando aplicável.'
+          : 'Cotação de performance enviada para fila de aprovação interna.'
         : 'PDF gerado com sucesso',
     });
   } catch (error) {
