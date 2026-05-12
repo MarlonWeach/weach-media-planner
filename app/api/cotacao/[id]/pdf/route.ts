@@ -16,34 +16,22 @@ import {
   sendCotacaoOperationalEmail,
 } from '@/lib/notifications/cotacaoEmail';
 import { syncCotacaoToGoogleSheets } from '@/lib/integrations/googleSheetsCotacao';
-import { normalizarCidadesParaExibicao } from '@/lib/utils/cidades';
+import {
+  extrairPayloadObservacoes,
+  montarRegiaoExibicao,
+  type ObservacaoPayload,
+} from '@/lib/cotacao/regiaoExibicaoCotacao';
+import { montarDadosCotacaoParaExportacaoPlano } from '@/lib/cotacao/montarDadosExportacaoPlanoMidiaComercial';
+import {
+  extrairDefinicaoCampanhaDaObservacao,
+  resolverApenasPerformance,
+} from '@/lib/cotacao/definicaoCampanhaCotacao';
+import { gerarBufferPlanoMidiaXlsx } from '@/lib/excel/gerarPlanoMidiaXlsx';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
-type DefinicaoCampanha = 'PERFORMANCE' | 'PROGRAMATICA' | 'WHATSAPP_SMS_PUSH';
 const PDF_PUBLIC_CLEANUP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-
-interface ObservacaoPayload {
-  solicitacao?: {
-    solicitante?: string;
-    solicitanteEmail?: string;
-    agencia?: string;
-    cotacaoProativa?: boolean;
-    observacoesGerais?: string;
-  };
-  estrategia?: {
-    definicaoCampanha?: string[];
-  };
-  cobertura?: {
-    tipoRegiao?: string;
-    estadosSelecionados?: string[];
-    cidades?: string;
-  };
-  workflowPerformance?: {
-    queueEmailMessageId?: string;
-  };
-}
 
 function serializarErro(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
@@ -80,32 +68,6 @@ function limparPdfsPublicosAntigos(publicPdfDir: string): void {
   }
 }
 
-function extrairDefinicaoCampanhaDaObservacao(observacoes: string | null): DefinicaoCampanha[] {
-  if (!observacoes) return [];
-  try {
-    const parsed = JSON.parse(observacoes) as {
-      estrategia?: { definicaoCampanha?: string[] };
-    };
-    const lista = parsed?.estrategia?.definicaoCampanha || [];
-    return lista.filter(
-      (item): item is DefinicaoCampanha =>
-        item === 'PERFORMANCE' || item === 'PROGRAMATICA' || item === 'WHATSAPP_SMS_PUSH'
-    );
-  } catch {
-    return [];
-  }
-}
-
-function extrairPayloadObservacoes(observacoes: string | null): ObservacaoPayload | null {
-  if (!observacoes) return null;
-  try {
-    const parsed = JSON.parse(observacoes) as ObservacaoPayload;
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 function atualizarObservacoesComQueueMessageId(
   observacoesAtual: string | null,
   messageId: string
@@ -134,40 +96,6 @@ function atualizarObservacoesComQueueMessageId(
   );
 }
 
-function inferirDefinicaoCampanhaPeloMix(mixSugerido: unknown): DefinicaoCampanha[] {
-  const rows: Array<{ canal?: string }> = Array.isArray(mixSugerido)
-    ? (mixSugerido as Array<{ canal?: string }>)
-    : Array.isArray((mixSugerido as { mix?: Array<{ canal?: string }> } | null)?.mix)
-      ? ((mixSugerido as { mix?: Array<{ canal?: string }> }).mix as Array<{ canal?: string }>)
-      : [];
-
-  const canais = new Set(
-    rows
-      .map((row) => (typeof row?.canal === 'string' ? row.canal.toUpperCase() : ''))
-      .filter(Boolean)
-  );
-
-  const result = new Set<DefinicaoCampanha>();
-  if (canais.has('CPL_CPI')) {
-    result.add('PERFORMANCE');
-  }
-  if (
-    canais.has('DISPLAY_PROGRAMATICO') ||
-    canais.has('VIDEO_PROGRAMATICO') ||
-    canais.has('CTV') ||
-    canais.has('AUDIO_DIGITAL') ||
-    canais.has('SOCIAL_PROGRAMATICO') ||
-    canais.has('IN_LIVE')
-  ) {
-    result.add('PROGRAMATICA');
-  }
-  if (canais.has('CRM_MEDIA')) {
-    result.add('WHATSAPP_SMS_PUSH');
-  }
-
-  return Array.from(result);
-}
-
 function extrairObservacoesGeraisTexto(observacoes: string | null): string {
   if (!observacoes || observacoes.trim() === '') return 'Sem observações.';
   try {
@@ -184,24 +112,6 @@ function extrairObservacoesGeraisTexto(observacoes: string | null): string {
     }
     return textoLivre;
   }
-}
-
-function montarRegiaoExibicao(regiaoTecnica: string, payloadObs: ObservacaoPayload | null): string {
-  const cobertura = payloadObs?.cobertura;
-  if (!cobertura) return regiaoTecnica;
-
-  const tipoRegiao = String(cobertura.tipoRegiao || '').toUpperCase();
-  if (tipoRegiao === 'CIDADES') {
-    const cidades = String(cobertura.cidades || '').trim();
-    return cidades.length > 0 ? normalizarCidadesParaExibicao(cidades) : regiaoTecnica;
-  }
-  if (tipoRegiao === 'ESTADO') {
-    const estados = Array.isArray(cobertura.estadosSelecionados)
-      ? cobertura.estadosSelecionados.filter(Boolean)
-      : [];
-    return estados.length > 0 ? estados.join(', ') : regiaoTecnica;
-  }
-  return regiaoTecnica;
 }
 
 export async function POST(
@@ -256,51 +166,9 @@ export async function POST(
       );
     }
 
-    // Prepara dados para o PDF
-    const mix = cotacao.mixSugerido as any;
-    const precos = cotacao.precosSugeridos as any;
-    const estimativasRaw = cotacao.estimativas as any;
-    const mixRows = Array.isArray(mix) ? mix : mix?.mix || [];
-    const estimativas = {
-      impressoes: Number(estimativasRaw?.impressoes || 0),
-      cliques: Number(estimativasRaw?.cliques || 0),
-      leads: Number(estimativasRaw?.leads || 0),
-      cpmEstimado: Number(estimativasRaw?.cpmEstimado || 0),
-      cpcEstimado: Number(estimativasRaw?.cpcEstimado || 0),
-      cplEstimado: Number(estimativasRaw?.cplEstimado || 0),
-    };
-    if (estimativas.cpmEstimado <= 0 && estimativas.impressoes > 0) {
-      estimativas.cpmEstimado = Number(cotacao.budget) / (estimativas.impressoes / 1000);
-    }
-    if (estimativas.cpcEstimado <= 0 && estimativas.cliques > 0) {
-      estimativas.cpcEstimado = Number(cotacao.budget) / estimativas.cliques;
-    }
-    if (estimativas.cplEstimado <= 0 && estimativas.leads > 0) {
-      estimativas.cplEstimado = Number(cotacao.budget) / estimativas.leads;
-    }
     const payloadObs = extrairPayloadObservacoes(cotacao.observacoes);
     const regiaoExibicao = montarRegiaoExibicao(cotacao.regiao, payloadObs);
 
-    const dadosPDF = {
-      id: cotacao.id,
-      clienteNome: cotacao.clienteNome,
-      clienteSegmento: cotacao.clienteSegmento,
-      objetivo: cotacao.objetivo,
-      budget: Number(cotacao.budget),
-      dataInicio: cotacao.dataInicio,
-      dataFim: cotacao.dataFim,
-      regiao: cotacao.regiao,
-      explicacaoComercial: '', // Será preenchido se existir no histórico IA
-      mix: mixRows,
-      precos,
-      estimativas,
-      vendedor: {
-        nome: cotacao.vendedor.nome,
-        email: cotacao.vendedor.email,
-      },
-    };
-
-    // Busca explicação comercial do histórico IA
     const historicoIA = await prisma.wp_HistoricoIA.findFirst({
       where: {
         cotacaoId: cotacao.id,
@@ -309,20 +177,25 @@ export async function POST(
       orderBy: { createdAt: 'desc' },
     });
 
+    let explicacaoComercial = '';
     if (historicoIA) {
       try {
         const resposta = JSON.parse(historicoIA.respostaIa);
-        dadosPDF.explicacaoComercial = typeof resposta === 'string' ? resposta : resposta.texto || '';
+        explicacaoComercial =
+          typeof resposta === 'string' ? resposta : resposta.texto || '';
       } catch {
-        dadosPDF.explicacaoComercial = historicoIA.respostaIa;
+        explicacaoComercial = historicoIA.respostaIa;
       }
     }
 
+    const dadosPDF = montarDadosCotacaoParaExportacaoPlano(cotacao, explicacaoComercial);
+
     const definicaoDaObservacao = extrairDefinicaoCampanhaDaObservacao(cotacao.observacoes);
-    const definicaoCampanha =
-      definicaoDaObservacao.length > 0
-        ? definicaoDaObservacao
-        : inferirDefinicaoCampanhaPeloMix(cotacao.mixSugerido);
+    const { definicaoCampanha, apenasPerformance } = resolverApenasPerformance(
+      cotacao.observacoes,
+      cotacao.mixSugerido
+    );
+    const isPerformance = definicaoCampanha.includes('PERFORMANCE');
 
     if (definicaoDaObservacao.length === 0) {
       console.warn(
@@ -330,13 +203,6 @@ export async function POST(
         JSON.stringify({ cotacaoId, source: 'mixSugerido', definicaoCampanha })
       );
     }
-
-    const isPerformance = definicaoCampanha.includes('PERFORMANCE');
-    const temProgramaticaOuMensageria =
-      definicaoCampanha.includes('PROGRAMATICA') ||
-      definicaoCampanha.includes('WHATSAPP_SMS_PUSH');
-    /** Só performance (sem programática/mensageria): não gera PDF de plano; híbrido gera plano da parte tabulada. */
-    const apenasPerformance = isPerformance && !temProgramaticaOuMensageria;
     const statusJaProcessado = ['ENVIADA', 'AGUARDANDO_APROVACAO', 'APROVADA', 'RECUSADA'].includes(
       String(cotacao.status)
     );
@@ -356,11 +222,22 @@ export async function POST(
     let pdfFileName = '';
     let pdfPath = '';
     let pdfUrl: string | null = null;
+    let xlsxFileName = '';
+    let xlsxPath = '';
 
     if (!apenasPerformance) {
       pdfFileName = `cotacao-${cotacaoId}-${nowTs}.pdf`;
       pdfPath = path.join(attachmentDir, pdfFileName);
       await gerarPDF(dadosPDF, pdfPath);
+      xlsxFileName = `cotacao-${cotacaoId}-${nowTs}-plano-midia.xlsx`;
+      xlsxPath = path.join(attachmentDir, xlsxFileName);
+      const xlsxBuffer = await gerarBufferPlanoMidiaXlsx(dadosPDF, {
+        dataCotacao: cotacao.createdAt,
+        agenciaNome:
+          (cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || '').trim() || '—',
+        regiaoTexto: regiaoExibicao,
+      });
+      fs.writeFileSync(xlsxPath, xlsxBuffer);
       if (podePersistirPdfPublico) {
         if (!fs.existsSync(publicPdfDir)) {
           fs.mkdirSync(publicPdfDir, { recursive: true });
@@ -439,14 +316,15 @@ export async function POST(
         agenciaNome: cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || undefined,
         cotacaoProativa: Boolean(payloadObs?.solicitacao?.cotacaoProativa),
         observacoes: cotacao.observacoes || undefined,
-        mix: mixRows,
-        precos,
-        estimativas,
+        mix: dadosPDF.mix,
+        precos: dadosPDF.precos,
+        estimativas: dadosPDF.estimativas,
         attachments:
           apenasPerformance
             ? [{ path: briefingPdfPath, filename: briefingPdfFileName }]
             : [
                 ...(pdfPath ? [{ path: pdfPath, filename: pdfFileName }] : []),
+                ...(xlsxPath ? [{ path: xlsxPath, filename: xlsxFileName }] : []),
                 { path: briefingPdfPath, filename: briefingPdfFileName },
               ],
       };
@@ -538,7 +416,7 @@ export async function POST(
         {
           success: false,
           error:
-            'Falha no envio da cotação (e-mail/PDF). Revise SMTP e destinatários. A sincronização com Google Sheets é registrada em log e pode ser retentada.',
+            'Falha no envio da cotação (e-mail, PDF ou Excel). Revise SMTP e destinatários. A sincronização com Google Sheets é registrada em log e pode ser retentada.',
           cotacaoId,
           pdfUrl,
         },
@@ -548,10 +426,17 @@ export async function POST(
       if (fs.existsSync(briefingPdfPath)) {
         fs.unlinkSync(briefingPdfPath);
       }
+      if (xlsxPath && fs.existsSync(xlsxPath)) {
+        fs.unlinkSync(xlsxPath);
+      }
       if (pdfPath && fs.existsSync(pdfPath)) {
         fs.unlinkSync(pdfPath);
       }
     }
+
+    const temProgramaticaOuMensageria =
+      definicaoCampanha.includes('PROGRAMATICA') ||
+      definicaoCampanha.includes('WHATSAPP_SMS_PUSH');
 
     return NextResponse.json({
       success: true,

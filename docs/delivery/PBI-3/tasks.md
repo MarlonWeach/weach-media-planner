@@ -15,11 +15,12 @@
 | 3-6 | Criar visualizações com gráficos | 📌 Pendente | 📌 Média |
 | 3-7 | Implementar exportação CSV | 📌 Pendente | 📌 Média |
 | 3-8 | Implementar exportação PDF de relatórios | 📌 Pendente | 📎 Baixa |
+| 3-9 | Exportar plano de mídia da cotação em Excel (espelho do PDF comercial) + anexo no e-mail | ✅ Done | 📌 Média |
 
 ## Ordem de Execução Recomendada
 
 1. **3-1** - API base de relatórios
 2. **3-2, 3-3, 3-4, 3-5** - Relatórios principais (paralelos)
 3. **3-6** - Visualizações
-4. **3-7, 3-8** - Exportações
+4. **3-7, 3-8, 3-9** - Exportações (CSV, PDF de relatórios, Excel do plano na cotação)
 

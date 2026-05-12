@@ -190,6 +190,7 @@ export function WizardStep4({
   const [itemsPlano, setItemsPlano] = useState<ItemPlanoMidia[]>([]);
   const [cotacaoId, setCotacaoId] = useState<string | null>(null);
   const [gerandoPDF, setGerandoPDF] = useState(false);
+  const [baixandoExcel, setBaixandoExcel] = useState(false);
   const [erroAjuste, setErroAjuste] = useState<string | null>(null);
   /** Notificação em página (substitui `alert` do browser). */
   const [bannerFluxo, setBannerFluxo] = useState<{
@@ -1074,6 +1075,41 @@ export function WizardStep4({
     }
   };
 
+  const handleBaixarExcelPlano = async () => {
+    if (!cotacaoId) return;
+    setBaixandoExcel(true);
+    setBannerFluxo(null);
+    try {
+      const authHeaders = obterHeadersAutenticacao();
+      if (!authHeaders) throw new Error('Sessão expirada. Faça login novamente.');
+      const response = await fetch(`/api/cotacao/${cotacaoId}/excel`, {
+        method: 'GET',
+        headers: { ...authHeaders },
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Erro ao baixar o Excel do plano.'
+        );
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `cotacao-${cotacaoId}-plano-midia.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setBannerFluxo({
+        tipo: 'error',
+        titulo: 'Download Excel',
+        mensagem: err instanceof Error ? err.message : 'Não foi possível baixar o Excel.',
+      });
+    } finally {
+      setBaixandoExcel(false);
+    }
+  };
+
   const handleGerarPDF = async () => {
     if (!cotacaoId) return;
     if (!apenasPerformanceNoWizard && !distribuicaoCompleta) {
@@ -1129,7 +1165,7 @@ export function WizardStep4({
           tipo: 'success',
           titulo: tituloSucesso,
           mensagem:
-            'O PDF do plano foi pedido ao navegador (normalmente numa nova aba). Se não vir o separador ou a aba ficar em branco por uns segundos, use o link abaixo — a cotação já ficou registada.',
+            'O PDF do plano foi pedido ao navegador (normalmente numa nova aba). O mesmo plano segue em Excel anexo ao e-mail operacional. Se não vir o separador ou a aba ficar em branco por uns segundos, use o link abaixo — a cotação já ficou registada.',
           pdfHref,
           redirecionaHome: true,
         });
@@ -1450,6 +1486,16 @@ export function WizardStep4({
           >
             Salvar Rascunho
           </button>
+          {!apenasPerformanceNoWizard && cotacaoId ? (
+            <button
+              type="button"
+              onClick={() => void handleBaixarExcelPlano()}
+              disabled={baixandoExcel || !distribuicaoCompleta}
+              className="w-full px-6 py-2 text-primary-dark border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
+            >
+              {baixandoExcel ? 'Gerando Excel...' : 'Baixar plano (.xlsx)'}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={handleGerarPDF}
