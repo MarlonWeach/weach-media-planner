@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { montarLinhasBriefingObservacoes, type BriefingLinha } from '@/lib/cotacao/briefingLinhas';
+import { modeloCompraCrmPorFormato, precoUnitarioCrmPorFormato } from '@/lib/cotacao/precosMensageriaCrm';
 
 type DefinicaoCampanha = 'PERFORMANCE' | 'PROGRAMATICA' | 'WHATSAPP_SMS_PUSH';
 
@@ -461,14 +462,16 @@ function formatNumber(value: number): string {
   }).format(Number.isFinite(value) ? value : 0);
 }
 
-function getModeloCompra(canal: string): string {
+function getModeloCompra(canal: string, formato?: string): string {
+  if (canal === 'CRM_MEDIA') {
+    return modeloCompraCrmPorFormato(formato);
+  }
   const modelos: Record<string, string> = {
     DISPLAY_PROGRAMATICO: 'CPM',
     VIDEO_PROGRAMATICO: 'CPV',
     CTV: 'CPV',
     AUDIO_DIGITAL: 'CPM',
     SOCIAL_PROGRAMATICO: 'CPC',
-    CRM_MEDIA: 'CPD',
     IN_LIVE: 'CPM',
     CPL_CPI: 'CPL',
   };
@@ -489,13 +492,20 @@ function getNomeCanal(canal: string): string {
   return nomes[canal] || canal.replaceAll('_', ' ');
 }
 
-function getPrecoUnitario(canal: string, precos: any): number {
+function getPrecoUnitario(canal: string, precos: any, formato?: string): number {
+  const crm = precos?.crm as Partial<Record<'whatsappCpd' | 'smsCpd' | 'pushCpc', number>> | undefined;
   if (canal === 'DISPLAY_PROGRAMATICO') return Number(precos?.display?.cpmBase ?? 4);
   if (canal === 'VIDEO_PROGRAMATICO') return Number(precos?.video?.cpvVideo30 ?? 0.04);
   if (canal === 'CTV') return Number(precos?.ctv?.cpvCtv30Open ?? 0.04);
   if (canal === 'AUDIO_DIGITAL') return Number(precos?.audio?.spotifyAudioCpm ?? 47);
   if (canal === 'SOCIAL_PROGRAMATICO') return Number(precos?.social?.fbTrafego ?? 2.5);
-  if (canal === 'CRM_MEDIA') return 0.6;
+  if (canal === 'CRM_MEDIA') {
+    const f = (formato || '').toLowerCase();
+    if (f.includes('whatsapp')) return Number(crm?.whatsappCpd ?? precoUnitarioCrmPorFormato(formato));
+    if (f.includes('sms')) return Number(crm?.smsCpd ?? precoUnitarioCrmPorFormato(formato));
+    if (f.includes('push')) return Number(crm?.pushCpc ?? precoUnitarioCrmPorFormato(formato));
+    return precoUnitarioCrmPorFormato(formato);
+  }
   if (canal === 'IN_LIVE') return 6;
   if (canal === 'CPL_CPI') return 50;
   return 1;
@@ -530,10 +540,10 @@ function buildPlanoRows(input: SendCotacaoEmailInput): string {
       const budgetLinha = Number.isFinite(Number(item.valorBudget))
         ? Number(item.valorBudget)
         : (input.budget * percentual) / 100;
-      const modelo = item.modeloCompra || getModeloCompra(item.canal);
+      const modelo = item.modeloCompra || getModeloCompra(item.canal, item.formato);
       const precoUnit = Number.isFinite(Number(item.precoUnitario))
         ? Number(item.precoUnitario)
-        : getPrecoUnitario(item.canal, precos);
+        : getPrecoUnitario(item.canal, precos, item.formato);
       const entrega = Number.isFinite(Number(item.entregaEstimada))
         ? Number(item.entregaEstimada)
         : calcEntrega(modelo, budgetLinha, precoUnit);
@@ -564,10 +574,10 @@ function buildPlanoTexto(input: SendCotacaoEmailInput): string {
       const budgetLinha = Number.isFinite(Number(item.valorBudget))
         ? Number(item.valorBudget)
         : (input.budget * percentual) / 100;
-      const modelo = item.modeloCompra || getModeloCompra(item.canal);
+      const modelo = item.modeloCompra || getModeloCompra(item.canal, item.formato);
       const precoUnit = Number.isFinite(Number(item.precoUnitario))
         ? Number(item.precoUnitario)
-        : getPrecoUnitario(item.canal, precos);
+        : getPrecoUnitario(item.canal, precos, item.formato);
       const entrega = Number.isFinite(Number(item.entregaEstimada))
         ? Number(item.entregaEstimada)
         : calcEntrega(modelo, budgetLinha, precoUnit);

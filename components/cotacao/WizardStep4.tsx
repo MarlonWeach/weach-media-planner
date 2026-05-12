@@ -12,6 +12,15 @@ import { PricingTable } from './PricingTable';
 import { AlertBox } from './AlertBox';
 import { EstimativasCard } from './EstimativasCard';
 import { RegraGovernanca } from '@/lib/pricing/regrasGovernanca';
+import {
+  modeloCompraCrmPorFormato,
+  PRECO_CRM_PUSH_CPC,
+  PRECO_CRM_SMS_CPD,
+  PRECO_CRM_WHATSAPP_CPD,
+} from '@/lib/cotacao/precosMensageriaCrm';
+import { formatoCpvStreamersApenasNotion } from '@/lib/cotacao/formatosPrecoNotion';
+import { montarNomeArquivoPlanoMidiaXlsx } from '@/lib/cotacao/nomeArquivoPlanoMidia';
+import { obterCvrPercentualCpvParaExibicao } from '@/lib/cotacao/planoMidiaTabelaComercial';
 
 interface MixCanal {
   canal: string;
@@ -27,6 +36,8 @@ interface ItemPlanoMidia {
   precoOriginal: number;
   percentualBudget: number;
   valorBudget: number;
+  /** HBO/MAX, Netflix, Disney+ ou TikTok sem D3 válido: preço manual no Notion. */
+  consultaPrecoNoNotion?: boolean;
   estimativas?: {
     impressoes?: number;
     cliques?: number;
@@ -43,10 +54,6 @@ interface FormatoSelecionado {
 
 const CTR_DISPLAY_CPM = 0.004; // 0,40%
 const CTR_SOCIAL = 0.02; // 2%
-const VIDEO_CVR_15S = 0.8; // 80%
-const VIDEO_CVR_30S = 0.75; // 75%
-const VIDEO_CVR_CTV = 0.95; // 95%
-const VIDEO_CVR_DEFAULT = 0.75;
 const CIDADES_GRANDES_ALIASES: Record<string, string[]> = {
   'sao paulo': ['sao paulo', 'são paulo', 'sao paulo sp', 'são paulo sp', 'sao paulo-sp', 'são paulo-sp', 'sao paulo capital', 'são paulo capital', 'sao capital', 'são capital'],
   'rio de janeiro': ['rio de janeiro', 'rio de janeiro rj', 'rio de janeiro-rj', 'rio rj', 'rio de janeiro capital', 'rio capital'],
@@ -282,17 +289,32 @@ export function WizardStep4({
       .map((item) => {
         const canal = typeof item.canal === 'string' ? item.canal : 'DISPLAY_PROGRAMATICO';
         const formato = typeof item.formato === 'string' ? item.formato : obterFormatoCanal(canal);
-        const modeloCompra = typeof item.modeloCompra === 'string' ? item.modeloCompra : obterModeloCompra(canal);
+        const modeloCompra =
+          typeof item.modeloCompra === 'string'
+            ? item.modeloCompra
+            : obterModeloCompra(canal, formato);
         const percentualBudget = Number(item.percentual ?? 0);
         const valorBudget =
           Number.isFinite(Number(item.valorBudget))
             ? Number(item.valorBudget)
             : (dadosPassos.step3.budget * percentualBudget) / 100;
         const precoRecalculado = obterPrecoCanal(canal, formato, precosRecalculados);
-        const preco = Number.isFinite(precoRecalculado)
-          ? Number(precoRecalculado)
-          : Number(item.precoUnitario ?? item.preco ?? 0);
-        const precoSeguro = Number.isFinite(preco) && preco > 0 ? preco : 0;
+        const consultaPrecoNoNotion =
+          formatoCpvStreamersApenasNotion(formato || '') || !Number.isFinite(precoRecalculado);
+        const precoBruto = consultaPrecoNoNotion
+          ? 0
+          : Number.isFinite(precoRecalculado)
+            ? Number(precoRecalculado)
+            : Number(item.precoUnitario ?? item.preco ?? 0);
+        const precoSeguro = Number.isFinite(precoBruto) && precoBruto > 0 ? precoBruto : 0;
+        const regra: RegraGovernanca = consultaPrecoNoNotion
+          ? { precoMin: 0, precoAlvo: 0, precoMax: 1_000_000, margemMinima: 0 }
+          : {
+              precoMin: precoSeguro * 0.8,
+              precoAlvo: precoSeguro,
+              precoMax: precoSeguro * 1.2,
+              margemMinima: 20,
+            };
 
         return {
           canal,
@@ -300,6 +322,7 @@ export function WizardStep4({
           modeloCompra,
           preco: precoSeguro,
           precoOriginal: precoSeguro,
+          ...(consultaPrecoNoNotion ? { consultaPrecoNoNotion: true } : {}),
           percentualBudget: Number.isFinite(percentualBudget) ? percentualBudget : 0,
           valorBudget: Number.isFinite(valorBudget) ? valorBudget : 0,
           estimativas: calcularEstimativasItem(
@@ -309,12 +332,7 @@ export function WizardStep4({
             formato,
             canal
           ),
-          regra: {
-            precoMin: precoSeguro * 0.8,
-            precoAlvo: precoSeguro,
-            precoMax: precoSeguro * 1.2,
-            margemMinima: 20,
-          },
+          regra,
         } satisfies ItemPlanoMidia;
       });
 
@@ -478,7 +496,7 @@ export function WizardStep4({
       FACEBOOK_INSTAGRAM_ENGAJAMENTO: 'SOCIAL_PROGRAMATICO',
       FACEBOOK_INSTAGRAM_TRAFEGO: 'SOCIAL_PROGRAMATICO',
       FACEBOOK_INSTAGRAM_LEAD_AD: 'SOCIAL_PROGRAMATICO',
-      DISPLAY_GEOFENCE_3KM: 'IN_LIVE',
+      DISPLAY_GEOFENCE_3KM: 'DISPLAY_PROGRAMATICO',
     };
 
     if (definicoes.includes('PROGRAMATICA')) {
@@ -580,13 +598,18 @@ export function WizardStep4({
       return comPercentual.map(({ entrada, percentual }) => {
         const p = percentual as number;
         const valorBudget = (budgetTotal * p) / 100;
-        const preco = obterPrecoCanal(entrada.canal, entrada.formato, precos);
-        const regra: RegraGovernanca = {
-          precoMin: preco * 0.8,
-          precoAlvo: preco,
-          precoMax: preco * 1.2,
-          margemMinima: 20,
-        };
+        const rawPreco = obterPrecoCanal(entrada.canal, entrada.formato, precos);
+        const consultaPrecoNoNotion =
+          formatoCpvStreamersApenasNotion(entrada.formato || '') || !Number.isFinite(rawPreco);
+        const preco = consultaPrecoNoNotion ? 0 : rawPreco;
+        const regra: RegraGovernanca = consultaPrecoNoNotion
+          ? { precoMin: 0, precoAlvo: 0, precoMax: 1_000_000, margemMinima: 0 }
+          : {
+              precoMin: preco * 0.8,
+              precoAlvo: preco,
+              precoMax: preco * 1.2,
+              margemMinima: 20,
+            };
 
         return {
           canal: entrada.canal,
@@ -594,6 +617,7 @@ export function WizardStep4({
           modeloCompra: entrada.modeloCompra,
           preco,
           precoOriginal: preco,
+          ...(consultaPrecoNoNotion ? { consultaPrecoNoNotion: true } : {}),
           percentualBudget: p,
           valorBudget,
           estimativas: calcularEstimativasItem(
@@ -622,27 +646,33 @@ export function WizardStep4({
               {
                 canal: item.canal,
                 formato: obterFormatoCanal(item.canal),
-                modeloCompra: obterModeloCompra(item.canal),
+                modeloCompra: obterModeloCompra(item.canal, obterFormatoCanal(item.canal)),
               },
             ];
 
       entradas.forEach((entrada) => {
         const percentual = percentualPorFormato;
         const valorBudget = (budgetTotal * percentual) / 100;
-        const preco = obterPrecoCanal(item.canal, entrada.formato, precos);
-        const regra: RegraGovernanca = {
-          precoMin: preco * 0.8,
-          precoAlvo: preco,
-          precoMax: preco * 1.2,
-          margemMinima: 20,
-        };
+        const rawPreco = obterPrecoCanal(entrada.canal, entrada.formato, precos);
+        const consultaPrecoNoNotion =
+          formatoCpvStreamersApenasNotion(entrada.formato || '') || !Number.isFinite(rawPreco);
+        const preco = consultaPrecoNoNotion ? 0 : rawPreco;
+        const regra: RegraGovernanca = consultaPrecoNoNotion
+          ? { precoMin: 0, precoAlvo: 0, precoMax: 1_000_000, margemMinima: 0 }
+          : {
+              precoMin: preco * 0.8,
+              precoAlvo: preco,
+              precoMax: preco * 1.2,
+              margemMinima: 20,
+            };
 
         items.push({
-          canal: item.canal,
+          canal: entrada.canal,
           formato: entrada.formato,
           modeloCompra: entrada.modeloCompra,
           preco,
           precoOriginal: preco,
+          ...(consultaPrecoNoNotion ? { consultaPrecoNoNotion: true } : {}),
           percentualBudget: percentual,
           valorBudget,
           estimativas: calcularEstimativasItem(
@@ -694,7 +724,7 @@ export function WizardStep4({
       FACEBOOK_INSTAGRAM_ENGAJAMENTO: { canal: 'SOCIAL_PROGRAMATICO', formato: 'Facebook / Instagram - Engajamento', modeloCompra: 'CPE' },
       FACEBOOK_INSTAGRAM_TRAFEGO: { canal: 'SOCIAL_PROGRAMATICO', formato: 'Facebook / Instagram - Tráfego', modeloCompra: 'CPM' },
       FACEBOOK_INSTAGRAM_LEAD_AD: { canal: 'SOCIAL_PROGRAMATICO', formato: 'Facebook / Instagram - Lead Ad', modeloCompra: 'CPM' },
-      DISPLAY_GEOFENCE_3KM: { canal: 'IN_LIVE', formato: 'Display Geofence 3km', modeloCompra: 'CPM' },
+      DISPLAY_GEOFENCE_3KM: { canal: 'DISPLAY_PROGRAMATICO', formato: 'Display Geofence 3km', modeloCompra: 'CPM' },
       SPOTIFY_LEADERBOARD: { canal: 'DISPLAY_PROGRAMATICO', formato: 'Spotify Leaderboard', modeloCompra: 'CPM' },
       SPOTIFY_OVERLAY: { canal: 'DISPLAY_PROGRAMATICO', formato: 'Spotify Overlay', modeloCompra: 'CPM' },
       DEEZER_DISPLAY: { canal: 'DISPLAY_PROGRAMATICO', formato: 'Deezer Display', modeloCompra: 'CPM' },
@@ -734,6 +764,9 @@ export function WizardStep4({
     const formatoNormalizado = formato.toLowerCase();
 
     if (canal === 'DISPLAY_PROGRAMATICO') {
+      if (formatoNormalizado.includes('geofence') || formatoNormalizado.includes('display geofence')) {
+        return Number(precos?.display?.geofenceDisplay3kmCpm ?? 14);
+      }
       if (formatoNormalizado.includes('gama')) return Number(precos?.display?.gama ?? 5.75);
       if (formatoNormalizado.includes('cpm - display e/ou native')) {
         return Number(precos?.display?.cpmBase ?? 4);
@@ -759,14 +792,17 @@ export function WizardStep4({
     }
 
     if (canal === 'CTV') {
+      if (formatoCpvStreamersApenasNotion(formatoNormalizado)) {
+        return Number.NaN;
+      }
       if (formatoNormalizado.includes('globo fast')) return Number(precos?.ctv?.cpvGloboFast ?? 0.17);
       if (formatoNormalizado.includes('globoplay')) return Number(precos?.ctv?.cpvGloboPlay15 ?? 0.12);
       if (formatoNormalizado.includes('samsung')) return Number(precos?.ctv?.cpvSamsungFast ?? 0.15);
       if (formatoNormalizado.includes('philips') || formatoNormalizado.includes('aoc')) {
         return Number(precos?.ctv?.cpvPhilipsAoc ?? 0.1);
       }
-      if (formatoNormalizado.includes('max') || formatoNormalizado.includes('netflix') || formatoNormalizado.includes('disney')) {
-        return Number(precos?.ctv?.cpvMaxNetflixDisney ?? 1);
+      if (formatoNormalizado.includes('max / netflix') || formatoNormalizado.includes('disney+ / outros')) {
+        return Number(precos?.ctv?.cpvMaxNetflixDisney ?? 0);
       }
       return Number(precos?.ctv?.cpvCtv30Open ?? 0.04);
     }
@@ -778,6 +814,11 @@ export function WizardStep4({
     }
 
     if (canal === 'SOCIAL_PROGRAMATICO') {
+      if (formatoNormalizado.includes('tiktok')) {
+        const v = precos?.social?.tiktokCpm;
+        if (v != null && Number.isFinite(Number(v))) return Number(v);
+        return Number.NaN;
+      }
       if (formatoNormalizado.includes('linkedin sponsored')) return Number(precos?.social?.linkedinSponsored ?? 90);
       if (formatoNormalizado.includes('linkedin inmail')) return Number(precos?.social?.linkedinInmail ?? 2.8);
       if (formatoNormalizado.includes('kwai')) return Number(precos?.social?.kwai ?? 9);
@@ -787,7 +828,18 @@ export function WizardStep4({
       return Number(precos?.social?.fbTrafego ?? 10);
     }
 
-    if (canal === 'CRM_MEDIA') return 0.6;
+    if (canal === 'CRM_MEDIA') {
+      if (formatoNormalizado.includes('whatsapp')) {
+        return Number(precos?.crm?.whatsappCpd ?? PRECO_CRM_WHATSAPP_CPD);
+      }
+      if (formatoNormalizado.includes('sms')) {
+        return Number(precos?.crm?.smsCpd ?? PRECO_CRM_SMS_CPD);
+      }
+      if (formatoNormalizado.includes('push')) {
+        return Number(precos?.crm?.pushCpc ?? PRECO_CRM_PUSH_CPC);
+      }
+      return Number(precos?.crm?.whatsappCpd ?? PRECO_CRM_WHATSAPP_CPD);
+    }
     if (canal === 'IN_LIVE') return formatoNormalizado.includes('video') ? 0.07 : 6;
     if (canal === 'CPL_CPI') return 50;
     return 5;
@@ -807,14 +859,16 @@ export function WizardStep4({
     return formatos[canal] || '-';
   };
 
-  const obterModeloCompra = (canal: string): string => {
+  const obterModeloCompra = (canal: string, formato?: string): string => {
+    if (canal === 'CRM_MEDIA') {
+      return modeloCompraCrmPorFormato(formato);
+    }
     const modelos: Record<string, string> = {
       DISPLAY_PROGRAMATICO: 'CPM',
       VIDEO_PROGRAMATICO: 'CPV',
       CTV: 'CPV',
       AUDIO_DIGITAL: 'CPM',
       SOCIAL_PROGRAMATICO: 'CPC',
-      CRM_MEDIA: 'CPD',
       IN_LIVE: 'CPM',
       CPL_CPI: 'CPL',
     };
@@ -843,7 +897,8 @@ export function WizardStep4({
     }
     if (modeloCompra === 'CPV') {
       const completeViews = Math.round(valorBudget / preco);
-      const cvr = obterCvrVideo(formato);
+      const cvr =
+        (obterCvrPercentualCpvParaExibicao(canal || '', formato || '', modeloCompra) ?? 75) / 100;
       const impressoes = Math.round(completeViews / cvr);
       return { impressoes, cliques: 0, leads: 0 };
     }
@@ -857,20 +912,6 @@ export function WizardStep4({
       return { impressoes: 0, cliques: 0, leads: quantidade };
     }
     return { impressoes: 0, cliques: 0, leads: 0 };
-  };
-
-  const obterCvrVideo = (formato?: string): number => {
-    const formatoNormalizado = (formato || '').toLowerCase();
-    if (formatoNormalizado.includes('ctv')) {
-      return VIDEO_CVR_CTV;
-    }
-    if (formatoNormalizado.includes('15')) {
-      return VIDEO_CVR_15S;
-    }
-    if (formatoNormalizado.includes('30')) {
-      return VIDEO_CVR_30S;
-    }
-    return VIDEO_CVR_DEFAULT;
   };
 
   const obterCtrPorCanal = (canal?: string): number => {
@@ -1080,6 +1121,7 @@ export function WizardStep4({
     setBaixandoExcel(true);
     setBannerFluxo(null);
     try {
+      await sincronizarAjustesCotacao();
       const authHeaders = obterHeadersAutenticacao();
       if (!authHeaders) throw new Error('Sessão expirada. Faça login novamente.');
       const response = await fetch(`/api/cotacao/${cotacaoId}/excel`, {
@@ -1096,9 +1138,43 @@ export function WizardStep4({
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `cotacao-${cotacaoId}-plano-midia.xlsx`;
+      anchor.download = montarNomeArquivoPlanoMidiaXlsx(
+        dadosPassos.step1.anuncianteCampanha || dadosPassos.step1.clienteNome || 'campanha',
+        cotacaoId
+      );
       anchor.click();
       URL.revokeObjectURL(url);
+
+      const emailResponse = await fetch(`/api/cotacao/${cotacaoId}/plano-email`, {
+        method: 'POST',
+        headers: { ...authHeaders },
+      });
+      const emailData = await emailResponse.json().catch(() => ({}));
+      if (!emailResponse.ok) {
+        setBannerFluxo({
+          tipo: 'warning',
+          titulo: 'Plano baixado',
+          mensagem:
+            typeof emailData.error === 'string'
+              ? `O Excel foi baixado, mas o envio por e-mail falhou: ${emailData.error}`
+              : 'O Excel foi baixado, mas não foi possível enviar a cotação por e-mail.',
+        });
+        return;
+      }
+      if (emailData.emailEnviado === false) {
+        setBannerFluxo({
+          tipo: 'warning',
+          titulo: 'Plano baixado',
+          mensagem:
+            'O Excel foi baixado. O e-mail operacional não foi disparado (regra de envio ou destinatários).',
+        });
+        return;
+      }
+      setBannerFluxo({
+        tipo: 'success',
+        titulo: 'Plano baixado',
+        mensagem: 'O Excel foi baixado e a cotação foi enviada por e-mail.',
+      });
     } catch (err) {
       setBannerFluxo({
         tipo: 'error',

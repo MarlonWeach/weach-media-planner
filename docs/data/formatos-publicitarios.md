@@ -141,15 +141,15 @@ Inventario: crm_media
 Formatos principais:
 - whatsapp_disparo
   - Nome: Disparo de WhatsApp
-  - Modelo compra tipico: CPD (custo por disparo)
+  - Modelo compra tipico: CPD (custo por disparo; preco base de referencia R$ 0,34 — ver `docs/data/pricing-table-base.md` secao 2.1)
 
 - sms_disparo
   - Nome: Disparo de SMS
-  - Modelo compra tipico: CPD
+  - Modelo compra tipico: CPD (preco base de referencia R$ 0,20 — ver mesma secao)
 
 - push_notification
   - Nome: Push notification
-  - Modelo compra tipico: CPD ou CPM (dependendo do parceiro)
+  - Modelo compra tipico: **CPC** (custo por clique; preco base de referencia R$ 0,60 — ver `docs/data/pricing-table-base.md` secao 2.1)
 
 ============================================================
 7. IN LIVE E EVENTOS

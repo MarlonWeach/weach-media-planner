@@ -27,6 +27,7 @@ import {
   resolverApenasPerformance,
 } from '@/lib/cotacao/definicaoCampanhaCotacao';
 import { gerarBufferPlanoMidiaXlsx } from '@/lib/excel/gerarPlanoMidiaXlsx';
+import { montarNomeArquivoPlanoMidiaXlsx } from '@/lib/cotacao/nomeArquivoPlanoMidia';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -229,7 +230,7 @@ export async function POST(
       pdfFileName = `cotacao-${cotacaoId}-${nowTs}.pdf`;
       pdfPath = path.join(attachmentDir, pdfFileName);
       await gerarPDF(dadosPDF, pdfPath);
-      xlsxFileName = `cotacao-${cotacaoId}-${nowTs}-plano-midia.xlsx`;
+      xlsxFileName = montarNomeArquivoPlanoMidiaXlsx(dadosPDF.clienteNome, cotacaoId);
       xlsxPath = path.join(attachmentDir, xlsxFileName);
       const xlsxBuffer = await gerarBufferPlanoMidiaXlsx(dadosPDF, {
         dataCotacao: cotacao.createdAt,

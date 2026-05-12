@@ -73,6 +73,19 @@ Obs: os valores acima sao exemplos baseados na planilha.
 Ajuste para refletir os numeros oficiais da Weach.
 
 ============================================================
+2.1 CRM MENSAGERIA (WHATSAPP / SMS / PUSH)
+============================================================
+
+Precos unitarios base em reais (tabela comercial Weach; codigo: `lib/cotacao/precosMensageriaCrm.ts`):
+
+- whatsapp_cpd: 0.34 — CPD (custo por disparo / enviado / impacto)
+- sms_cpd: 0.20 — CPD
+- push_cpc: 0.60 — CPC (custo por clique)
+
+No admin, regras fixas por formato: `WhatsApp - CPD`, `SMS - CPD`, `Push - CPC` (canal `CRM_MEDIA`).  
+O motor de pricing expoe estes valores em `precos.crm` (`whatsappCpd`, `smsCpd`, `pushCpc`).
+
+============================================================
 3. MAPEAMENTOS CONDICIONAIS POR CPMBASE
 ============================================================
 

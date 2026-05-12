@@ -119,7 +119,12 @@ async function backfillPisosTetosPorRegrasAtivas() {
   });
 
   for (const regra of regrasAtivas) {
-    if (regra.canal === 'IN_LIVE' && regra.formato === 'Display Geofence 3km') continue;
+    if (
+      (regra.canal === 'IN_LIVE' || regra.canal === 'DISPLAY_PROGRAMATICO') &&
+      regra.formato === 'Display Geofence 3km'
+    ) {
+      continue;
+    }
 
     const valorAlvo = Number(regra.valor);
     if (!Number.isFinite(valorAlvo) || valorAlvo <= 0) continue;

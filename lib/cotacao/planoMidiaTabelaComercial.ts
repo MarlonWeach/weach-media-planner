@@ -3,6 +3,12 @@
  * Usado por PDF e exportação Excel para evitar divergência.
  */
 
+import {
+  modeloCompraCrmPorFormato,
+  precoUnitarioCrmPorFormato,
+} from './precosMensageriaCrm';
+import { formatoCpvStreamersApenasNotion } from '@/lib/cotacao/formatosPrecoNotion';
+
 export interface DadosCotacao {
   id: string;
   clienteNome: string;
@@ -127,22 +133,25 @@ export function formatarNomeCanal(canal: string): string {
   return nomes[canal] || canal.replace(/_/g, ' ');
 }
 
-function obterModeloCompra(canal: string): string {
+function obterModeloCompra(canal: string, formato?: string): string {
+  if (canal === 'CRM_MEDIA') {
+    return modeloCompraCrmPorFormato(formato);
+  }
   const modelos: Record<string, string> = {
     DISPLAY_PROGRAMATICO: 'CPM',
     VIDEO_PROGRAMATICO: 'CPV',
     CTV: 'CPV',
     AUDIO_DIGITAL: 'CPM',
     SOCIAL_PROGRAMATICO: 'CPC',
-    CRM_MEDIA: 'CPD',
     IN_LIVE: 'CPM',
     CPL_CPI: 'CPL',
   };
   return modelos[canal] || 'CPM';
 }
 
-function obterPrecoUnitarioCanal(canal: string, precos: unknown): number {
+function obterPrecoUnitarioCanal(canal: string, precos: unknown, formato?: string): number {
   const p = precos as Record<string, unknown> | null | undefined;
+  const crm = p?.crm as Partial<Record<'whatsappCpd' | 'smsCpd' | 'pushCpc', number>> | undefined;
   if (canal === 'DISPLAY_PROGRAMATICO') return Number((p?.display as { cpmBase?: number })?.cpmBase ?? 4);
   if (canal === 'VIDEO_PROGRAMATICO')
     return Number((p?.video as { cpvVideo30?: number })?.cpvVideo30 ?? 0.04);
@@ -151,7 +160,13 @@ function obterPrecoUnitarioCanal(canal: string, precos: unknown): number {
     return Number((p?.audio as { spotifyAudioCpm?: number })?.spotifyAudioCpm ?? 47);
   if (canal === 'SOCIAL_PROGRAMATICO')
     return Number((p?.social as { fbTrafego?: number })?.fbTrafego ?? 2.5);
-  if (canal === 'CRM_MEDIA') return 0.6;
+  if (canal === 'CRM_MEDIA') {
+    const f = (formato || '').toLowerCase();
+    if (f.includes('whatsapp')) return Number(crm?.whatsappCpd ?? precoUnitarioCrmPorFormato(formato));
+    if (f.includes('sms')) return Number(crm?.smsCpd ?? precoUnitarioCrmPorFormato(formato));
+    if (f.includes('push')) return Number(crm?.pushCpc ?? precoUnitarioCrmPorFormato(formato));
+    return precoUnitarioCrmPorFormato(formato);
+  }
   if (canal === 'IN_LIVE') return 6;
   if (canal === 'CPL_CPI') return 50;
   return 1;
@@ -215,10 +230,27 @@ function calcularLeadsEstimados(
 
 function obterCvrEstimado(canal: string, formato: string, modeloCompra: string): number | null {
   if (modeloCompra !== 'CPV') return null;
-  if (canal === 'CTV' || formato.toLowerCase().includes('ctv')) return 95;
-  if (formato.includes('15')) return 80;
-  if (formato.includes('30')) return 75;
+  const f = formato || '';
+  const fLower = f.toLowerCase();
+  if (
+    canal === 'CTV' ||
+    fLower.includes('ctv') ||
+    formatoCpvStreamersApenasNotion(f)
+  ) {
+    return 90;
+  }
+  if (f.includes('15')) return 80;
+  if (f.includes('30')) return 75;
   return 75;
+}
+
+/** Percentual inteiro de CVR para CPV (tabela no projeto, PDF tabular e Excel). */
+export function obterCvrPercentualCpvParaExibicao(
+  canal: string,
+  formato: string,
+  modeloCompra: string
+): number | null {
+  return obterCvrEstimado(canal, formato, modeloCompra);
 }
 
 function calcularImpressoesEstimadas(
@@ -301,10 +333,10 @@ export function montarLinhasMetricasPlanoMidia(dados: DadosCotacao): LinhaMetric
     const valorBudget = Number.isFinite(Number(item.valorBudget))
       ? Number(item.valorBudget)
       : (dados.budget * item.percentual) / 100;
-    const modeloCompra = item.modeloCompra || obterModeloCompra(item.canal);
+    const modeloCompra = item.modeloCompra || obterModeloCompra(item.canal, item.formato);
     const precoUnitario = Number.isFinite(Number(item.precoUnitario))
       ? Number(item.precoUnitario)
-      : obterPrecoUnitarioCanal(item.canal, dados.precos);
+      : obterPrecoUnitarioCanal(item.canal, dados.precos, item.formato);
     const entregaQuantidade = Number.isFinite(Number(item.entregaEstimada))
       ? Number(item.entregaEstimada)
       : calcularQuantidadeEntrega(modeloCompra, valorBudget, precoUnitario);

@@ -111,6 +111,7 @@ async function carregarValoresFixosPricing() {
     ctv: {},
     audio: {},
     social: {},
+    crm: {},
   };
 
   for (const regra of regras) {
@@ -125,6 +126,9 @@ async function carregarValoresFixosPricing() {
       if (formato.includes('leader')) valoresFixos.display.spotifyLeaderboard = valor;
       if (formato.includes('overlay')) valoresFixos.display.spotifyOverlay = valor;
       if (formato.includes('deezer display')) valoresFixos.display.deezerDisplay = valor;
+      if (formato.includes('geofence') || formato.includes('display 3km')) {
+        valoresFixos.display.geofenceDisplay3kmCpm = valor;
+      }
     }
 
     if (regra.canal === 'VIDEO_PROGRAMATICO') {
@@ -149,6 +153,13 @@ async function carregarValoresFixosPricing() {
       if (formato.includes('linkedin inmail')) valoresFixos.social.linkedinInmail = valor;
       if (formato.includes('kwai')) valoresFixos.social.kwai = valor;
       if (formato.includes('fb lead ad')) valoresFixos.social.fbLeadAd = valor;
+      if (formato.includes('tiktok') && valor > 0) valoresFixos.social.tiktokCpm = valor;
+    }
+
+    if (regra.canal === 'CRM_MEDIA') {
+      if (formato.includes('whatsapp')) valoresFixos.crm.whatsappCpd = valor;
+      else if (formato.includes('sms')) valoresFixos.crm.smsCpd = valor;
+      else if (formato.includes('push')) valoresFixos.crm.pushCpc = valor;
     }
   }
 
@@ -210,6 +221,7 @@ function mergeValoresFixos(valoresFormulario: any, valoresBanco: any) {
     ctv: { ...(valoresBanco?.ctv || {}), ...(valoresFormulario?.ctv || {}) },
     audio: { ...(valoresBanco?.audio || {}), ...(valoresFormulario?.audio || {}) },
     social: { ...(valoresBanco?.social || {}), ...(valoresFormulario?.social || {}) },
+    crm: { ...(valoresBanco?.crm || {}), ...(valoresFormulario?.crm || {}) },
   };
 }
 

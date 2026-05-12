@@ -71,9 +71,9 @@ Social Programatico:
 - Outros short-video partners via DSP ou plataforma parceira
 
 CRM Media:
-- Disparos de WhatsApp em bases opt in
-- Disparos de SMS em bases qualificadas
-- Push notifications em apps parceiros, quando aplicavel
+- Disparos de WhatsApp em bases opt in (CPD base R$ 0,34 por disparo — ver `docs/data/pricing-table-base.md` secao 2.1)
+- Disparos de SMS em bases qualificadas (CPD base R$ 0,20)
+- Push notifications em apps parceiros (CPC base R$ 0,60 por clique)
 
 In Live:
 - Insercoes em lives patrocinadas

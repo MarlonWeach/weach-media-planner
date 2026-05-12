@@ -8,6 +8,8 @@
 'use client';
 
 import { useState } from 'react';
+import { MENSAGEM_PRECO_NOTION } from '@/lib/cotacao/formatosPrecoNotion';
+import { obterCvrPercentualCpvParaExibicao } from '@/lib/cotacao/planoMidiaTabelaComercial';
 
 interface ItemPlanoMidia {
   canal: string;
@@ -17,6 +19,7 @@ interface ItemPlanoMidia {
   precoOriginal: number;
   percentualBudget: number;
   valorBudget: number;
+  consultaPrecoNoNotion?: boolean;
   estimativas?: {
     impressoes?: number;
     cliques?: number;
@@ -115,14 +118,8 @@ export function PricingTable({
   const obterCliquesEstimados = (item: ItemPlanoMidia) =>
     item.estimativas?.cliques || 0;
 
-  const obterCvrEstimado = (item: ItemPlanoMidia) => {
-    if (item.modeloCompra !== 'CPV') return null;
-    const formatoNormalizado = (item.formato || '').toLowerCase();
-    if (formatoNormalizado.includes('ctv')) return 95;
-    if (formatoNormalizado.includes('15')) return 80;
-    if (formatoNormalizado.includes('30')) return 75;
-    return 75;
-  };
+  const obterCvrEstimado = (item: ItemPlanoMidia) =>
+    obterCvrPercentualCpvParaExibicao(item.canal, item.formato || '', item.modeloCompra);
 
   const obterCtrEstimado = (item: ItemPlanoMidia) => {
     const impressoes = obterImpressesEstimadas(item);
@@ -218,6 +215,8 @@ export function PricingTable({
                     }}
                     className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-right text-sm"
                   />
+                ) : item.consultaPrecoNoNotion ? (
+                  <p className="mt-1 text-xs font-medium text-amber-900">{MENSAGEM_PRECO_NOTION}</p>
                 ) : (
                   <p className="font-medium text-gray-900">
                     {formatarMoeda(item.preco, obterCasasDecimaisPreco(item))}
@@ -356,6 +355,10 @@ export function PricingTable({
                     }}
                     className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary focus:border-transparent text-right"
                   />
+                ) : item.consultaPrecoNoNotion ? (
+                  <div className="text-xs font-medium text-amber-900 text-right max-w-[200px] ml-auto leading-snug">
+                    {MENSAGEM_PRECO_NOTION}
+                  </div>
                 ) : (
                   <div className="text-sm font-medium text-gray-900 whitespace-nowrap">
                     {formatarMoeda(item.preco, obterCasasDecimaisPreco(item))}

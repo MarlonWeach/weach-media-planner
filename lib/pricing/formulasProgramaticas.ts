@@ -7,6 +7,8 @@
  * Baseado em: docs/06-tabelas-de-preco-base.md
  */
 
+import { calcularTikTokCpmPorD3 } from '@/lib/cotacao/formatosPrecoNotion';
+
 export interface PrecoDisplay {
   cpmBase: number;
   gama: number;
@@ -50,6 +52,8 @@ export interface PrecoSocial {
   fbTrafego: number;
   fbEngajamento: number;
   fbLeadAd: number;
+  /** CPM TikTok por D3; ausente quando D3 ∉ {4,5,7,8,9}. */
+  tiktokCpm?: number;
 }
 
 function arredondarParaCima2Casas(valor: number): number {
@@ -124,7 +128,8 @@ export function calcularPrecosCTV(cpvVideo30: number, cpmBase: number, valoresFi
     cpvGloboPlay15: valoresFixos?.globoPlay15 ?? cpvVideo30 * 0.85,
     cpvSamsungFast: valoresFixos?.samsungFast ?? cpvGloboFast,
     cpvPhilipsAoc: valoresFixos?.philipsAoc ?? cpvGloboFast,
-    cpvMaxNetflixDisney: valoresFixos?.maxNetflixDisney ?? cpvGloboFast * 1.2,
+    /** Só preenchido por regra admin “MAX / Netflix / Disney+”; formatos HBO/Netflix/Disney no wizard usam Notion, não este valor. */
+    cpvMaxNetflixDisney: valoresFixos?.maxNetflixDisney ?? 0,
   };
 }
 
@@ -167,12 +172,20 @@ export function calcularPrecosAudio(cpvVideo30: number, valoresFixos?: {
 /**
  * Calcula preços de Social baseados no CPM base (D3)
  */
-export function calcularPrecosSocial(cpmBase: number, valoresFixos?: {
-  linkedinSponsored?: number;
-  linkedinInmail?: number;
-  kwai?: number;
-  fbLeadAd?: number;
-}): PrecoSocial {
+export function calcularPrecosSocial(
+  cpmBase: number,
+  valoresFixos?: {
+    linkedinSponsored?: number;
+    linkedinInmail?: number;
+    kwai?: number;
+    fbLeadAd?: number;
+    tiktokCpm?: number | null;
+  }
+): PrecoSocial {
+  const tikTok =
+    valoresFixos?.tiktokCpm !== undefined
+      ? valoresFixos.tiktokCpm
+      : calcularTikTokCpmPorD3(cpmBase);
   return {
     linkedinSponsored: valoresFixos?.linkedinSponsored ?? 90,
     linkedinInmail: valoresFixos?.linkedinInmail ?? 2.8,
@@ -180,6 +193,7 @@ export function calcularPrecosSocial(cpmBase: number, valoresFixos?: {
     fbTrafego: calcularFbTrafego(cpmBase),
     fbEngajamento: calcularFbEngajamento(cpmBase),
     fbLeadAd: valoresFixos?.fbLeadAd ?? 65,
+    ...(tikTok != null && Number.isFinite(tikTok) ? { tiktokCpm: tikTok } : {}),
   };
 }
 
@@ -262,6 +276,7 @@ export function calcularTodosPrecosProgramaticos(
     linkedinInmail: socialFix?.linkedinInmail,
     kwai: socialFix?.kwai,
     fbLeadAd: socialFix?.fbLeadAd,
+    tiktokCpm: socialFix?.tiktokCpm,
   });
 
   return {

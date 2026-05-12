@@ -13,6 +13,7 @@ import {
   montarRegiaoExibicao,
 } from '@/lib/cotacao/regiaoExibicaoCotacao';
 import { gerarBufferPlanoMidiaXlsx } from '@/lib/excel/gerarPlanoMidiaXlsx';
+import { montarNomeArquivoPlanoMidiaXlsx } from '@/lib/cotacao/nomeArquivoPlanoMidia';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,7 +90,7 @@ export async function GET(
         (cotacao.agenciaNome || payloadObs?.solicitacao?.agencia || '').trim() || '—',
       regiaoTexto: regiaoExibicao,
     });
-    const nomeArquivo = `cotacao-${cotacaoId}-plano-midia.xlsx`;
+    const nomeArquivo = montarNomeArquivoPlanoMidiaXlsx(dados.clienteNome, cotacaoId);
 
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,

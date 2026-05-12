@@ -95,10 +95,18 @@ O pricing é determinado pela combinação de:
 - CPM competitivo
 - CTR mais alto tende a puxar CPC sugerido para baixo
 
-## 3.5. CRM Media (WhatsApp/SMS/Push)
-- CPD (custo por disparo)  
-- CPD = Custo base + variável por região
-- Multiplicador para segmentações premium
+## 3.5. CRM Media (WhatsApp / SMS / Push)
+
+Preços base de referência (R$), por serviço:
+
+| Serviço    | Modelo | Preço unitário | Significado                          |
+|-----------|--------|----------------|--------------------------------------|
+| WhatsApp  | CPD    | 0,34           | Custo por disparo / enviado / impacto |
+| SMS       | CPD    | 0,20           | Custo por disparo / enviado / impacto |
+| Push      | CPC    | 0,60           | Custo por clique                     |
+
+Implementação: constantes e resolução por formato em `lib/cotacao/precosMensageriaCrm.ts`; valores administráveis também via regras fixas (`CRM_MEDIA`) no painel admin.  
+Pode haver multiplicador regional ou segmentação sobre estes pisos, conforme política comercial vigente.
 
 ## 3.6. In Live
 - Eventos podem ter CPM fixo ou pacote fechado

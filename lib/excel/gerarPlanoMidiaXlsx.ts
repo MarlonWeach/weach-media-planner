@@ -6,7 +6,6 @@ import {
   construirMatrizEstimativas,
   faseCampanhaPorObjetivo,
   formatarData,
-  formatarNumero,
   formatarObjetivo,
   formatarSegmento,
   montarLinhasMetricasPlanoMidia,
@@ -15,6 +14,11 @@ import {
 } from '@/lib/cotacao/planoMidiaTabelaComercial';
 
 const MIDIA_FIXA = 'Weach Programmatic';
+
+/** Tamanho do logo no Excel (pol.), em px 96 DPI — mesmo referencial do ExcelJS `ext`. */
+const LOGO_EXCEL_LARGURA_POL = 3.1;
+const LOGO_EXCEL_ALTURA_POL = 2.33;
+const PX_POR_POL_96DPI = 96;
 
 /** Metadados da proposta no modelo da planilha legada (K3–K9, período etc.). */
 export interface MetadadosPropostaXlsx {
@@ -74,10 +78,11 @@ const FONTE_BRANCA_NEGRITO = {
   color: { argb: 'FFFFFFFF' },
 };
 
-/** Larguras colunas B–T (sem Usuários únicos nem Leads). */
+/** Larguras colunas B–U (inclui coluna UNIDADE ao lado de ENTREGA). */
 const LARGURAS_COLS_B_T = [
   16.83203125, 16.83203125, 16.83203125, 11.5, 13.33203125, 21.1640625, 19, 14.6640625, 14.6640625,
-  14.6640625, 14.6640625, 14.6640625, 14.1640625, 14.6640625, 11.5, 14.83203125, 10.83203125, 28, 42.5,
+  14.6640625, 14.6640625, 14.6640625, 14.6640625, 14.1640625, 14.6640625, 11.5, 14.83203125, 10.83203125,
+  28, 42.5,
 ];
 
 function diasCorridosPeriodo(inicio: Date, fim: Date): number {
@@ -212,10 +217,10 @@ export async function gerarBufferPlanoMidiaXlsx(
   ws.getCell(`B${r12}`).value = 'ESTRATÉGIA PROPOSTA';
   ws.mergeCells(`E${r12}:H${r12}`);
   ws.getCell(`E${r12}`).value = 'TÁTICA PROPOSTA';
-  ws.mergeCells(`I${r12}:P${r12}`);
+  ws.mergeCells(`I${r12}:Q${r12}`);
   ws.getCell(`I${r12}`).value = 'KPIS MÍDIA';
-  ws.mergeCells(`Q${r12}:T${r12}`);
-  ws.getCell(`Q${r12}`).value = 'Observações';
+  ws.mergeCells(`R${r12}:U${r12}`);
+  ws.getCell(`R${r12}`).value = 'Observações';
 
   for (const addr of [`B${r12}`, `E${r12}`, `I${r12}`]) {
     const c = ws.getCell(addr);
@@ -228,7 +233,7 @@ export async function gerarBufferPlanoMidiaXlsx(
       bottom: { style: 'dotted', color: { argb: 'FFFFFFFF' } },
     };
   }
-  const cObsTit = ws.getCell(`Q${r12}`);
+  const cObsTit = ws.getCell(`R${r12}`);
   cObsTit.font = { name: 'Calibri', size: 10, bold: true };
   cObsTit.alignment = { horizontal: 'center', vertical: 'middle' };
   cObsTit.fill = FILL_RESUMO_FUNDO;
@@ -249,6 +254,7 @@ export async function gerarBufferPlanoMidiaXlsx(
     'INVENTARIO',
     'ALCANCE',
     'ENTREGA',
+    'UNIDADE',
     'IMP.',
     'CTR',
     'CVR',
@@ -265,8 +271,8 @@ export async function gerarBufferPlanoMidiaXlsx(
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     cell.border = BORDA_FINA;
   });
-  ws.mergeCells('Q13:T13');
-  const obsH = ws.getCell('Q13');
+  ws.mergeCells('R13:U13');
+  const obsH = ws.getCell('R13');
   obsH.value = 'Observações';
   obsH.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   obsH.fill = FILL_CABECALHO;
@@ -291,7 +297,10 @@ export async function gerarBufferPlanoMidiaXlsx(
       m.formato,
       '',
       '',
-      `${formatarNumero(m.entregaQuantidade)} ${m.entregaDescricao}`,
+      m.entregaQuantidade > 0 ? m.entregaQuantidade : '—',
+      m.entregaQuantidade > 0 && (m.entregaDescricao || '').trim() !== ''
+        ? (m.entregaDescricao || '').trim()
+        : '—',
       m.impressoes > 0 ? m.impressoes : '—',
       m.ctrRatio != null ? `${(m.ctrRatio * 100).toFixed(2)}%` : '—',
       m.cvrPercent != null ? `${m.cvrPercent}%` : '—',
@@ -304,9 +313,7 @@ export async function gerarBufferPlanoMidiaXlsx(
       cell.font = { name: 'Calibri', size: 10 };
       if (i === valores.length - 1) {
         cell.numFmt = '"R$" #,##0.00';
-      } else if (typeof val === 'number' && i === 10) {
-        cell.numFmt = '#,##0';
-      } else if (typeof val === 'number' && i === 13) {
+      } else if (typeof val === 'number' && (i === 9 || i === 11 || i === 14)) {
         cell.numFmt = '#,##0';
       }
       cell.alignment = { vertical: 'middle', wrapText: true };
@@ -321,21 +328,22 @@ export async function gerarBufferPlanoMidiaXlsx(
   rTot.getCell(2).font = { bold: true };
   const somaImp = linhasMetricas.reduce((a, m) => a + m.impressoes, 0);
   const somaCliq = linhasMetricas.reduce((a, m) => a + m.cliques, 0);
-  rTot.getCell(12).value = somaImp > 0 ? somaImp : '—';
-  if (typeof rTot.getCell(12).value === 'number') {
-    rTot.getCell(12).numFmt = '#,##0';
+  rTot.getCell(12).value = '—';
+  rTot.getCell(13).value = somaImp > 0 ? somaImp : '—';
+  if (typeof rTot.getCell(13).value === 'number') {
+    rTot.getCell(13).numFmt = '#,##0';
   }
-  rTot.getCell(13).value =
+  rTot.getCell(14).value =
     somaImp > 0 && somaCliq > 0 ? `${((somaCliq / somaImp) * 100).toFixed(2)}%` : '—';
-  rTot.getCell(14).value = '—';
-  rTot.getCell(15).value = somaCliq > 0 ? somaCliq : '—';
-  if (typeof rTot.getCell(15).value === 'number') {
-    rTot.getCell(15).numFmt = '#,##0';
+  rTot.getCell(15).value = '—';
+  rTot.getCell(16).value = somaCliq > 0 ? somaCliq : '—';
+  if (typeof rTot.getCell(16).value === 'number') {
+    rTot.getCell(16).numFmt = '#,##0';
   }
-  rTot.getCell(16).value = Number(dados.budget);
-  rTot.getCell(16).numFmt = '"R$" #,##0.00';
-  rTot.getCell(16).font = { bold: true };
-  for (let col = 2; col <= 16; col += 1) {
+  rTot.getCell(17).value = Number(dados.budget);
+  rTot.getCell(17).numFmt = '"R$" #,##0.00';
+  rTot.getCell(17).font = { bold: true };
+  for (let col = 2; col <= 17; col += 1) {
     rTot.getCell(col).border = BORDA_FINA;
   }
   rowIdx += 1;
@@ -382,7 +390,13 @@ export async function gerarBufferPlanoMidiaXlsx(
       filename: logoPath,
       extension: 'png',
     });
-    ws.addImage(imageId, 'B2:E10');
+    ws.addImage(imageId, {
+      tl: { col: 1, row: 1 },
+      ext: {
+        width: LOGO_EXCEL_LARGURA_POL * PX_POR_POL_96DPI,
+        height: LOGO_EXCEL_ALTURA_POL * PX_POR_POL_96DPI,
+      },
+    });
   }
 
   const buf = await workbook.xlsx.writeBuffer();
