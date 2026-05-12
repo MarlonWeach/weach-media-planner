@@ -65,7 +65,8 @@ const TEXTO_OBSERVACOES_PROPOSTA = [
   '- Proposta válida por 30 dias da data de sua emissão.',
 ].join('\n');
 
-const FONTE_BRANCA = { name: 'Calibri', size: 10, color: { argb: 'FFFFFFFF' } };
+const FONTE_PRETA = { name: 'Calibri', size: 10, color: { argb: 'FF000000' } };
+
 const FONTE_BRANCA_NEGRITO = {
   name: 'Calibri',
   size: 10,
@@ -119,7 +120,7 @@ function definirParResumoHK(
   cH.font = FONTE_BRANCA_NEGRITO;
   cH.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
   cK.value = valor;
-  cK.font = FONTE_BRANCA;
+  cK.font = FONTE_PRETA;
   cK.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
 }
 
