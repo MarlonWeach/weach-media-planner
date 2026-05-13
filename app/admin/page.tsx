@@ -9,7 +9,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
-import { UserMenu } from '@/components/layout/UserMenu';
 import Link from 'next/link';
 
 export default function AdminPage() {
@@ -138,7 +137,6 @@ export default function AdminPage() {
               >
                 ← Voltar ao Dashboard
               </Link>
-              <UserMenu />
             </div>
           </div>
         </div>

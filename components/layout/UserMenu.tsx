@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/contexts/AuthContext';
 
-export function UserMenu() {
+type UserMenuVariant = 'default' | 'headerDark';
+
+export function UserMenu({ variant = 'default' }: { variant?: UserMenuVariant }) {
   const { usuario, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -28,17 +30,22 @@ export function UserMenu() {
     .slice(0, 2)
     .toUpperCase();
 
+  const isHeaderDark = variant === 'headerDark';
+  const buttonClass = isHeaderDark
+    ? 'flex items-center gap-3 rounded-full border border-white/35 bg-white/10 px-3 py-1 text-white hover:bg-white/15'
+    : 'flex items-center gap-3 rounded-full border border-gray-300 bg-white px-3 py-1 hover:bg-gray-50';
+  const nomeClass = isHeaderDark
+    ? 'hidden text-sm text-white/95 md:block'
+    : 'hidden text-sm text-gray-700 md:block';
+  const avatarClass = isHeaderDark
+    ? 'flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-xs font-semibold text-white'
+    : 'flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white';
+
   return (
     <div className="relative" ref={menuRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-3 rounded-full border border-gray-300 bg-white px-3 py-1 hover:bg-gray-50"
-      >
-        <span className="hidden text-sm text-gray-700 md:block">{usuario.nome}</span>
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white">
-          {iniciais}
-        </span>
+      <button type="button" onClick={() => setOpen((prev) => !prev)} className={buttonClass}>
+        <span className={nomeClass}>{usuario.nome}</span>
+        <span className={avatarClass}>{iniciais}</span>
       </button>
 
       {open && (

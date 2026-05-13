@@ -63,12 +63,12 @@ export async function podeAcessarCotacao(
     return false;
   }
 
-  // Admin pode acessar todas as cotações
-  if (usuario.role === 'ADMIN') {
+  // Admin e manager (EXTERNO na UI) podem acessar qualquer cotação (leitura / fluxo operacional)
+  if (usuario.role === 'ADMIN' || usuario.role === 'EXTERNO') {
     return true;
   }
 
-  // Vendedor pode acessar apenas suas próprias cotações
+  // Comercial: apenas cotações próprias
   if (usuario.role === 'COMERCIAL') {
     return cotacaoVendedorId === userId;
   }

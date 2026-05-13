@@ -17,6 +17,7 @@
 | PBI-8B | Fase 8B - Base Histórica para IA de Performance | ✅ Done | ⚠️ Alta |
 | PBI-8C | Fase 8C - Operação Interna de Decisão de Performance | 📌 Pendente | ⚠️ Alta |
 | PBI-9 | Fase 9 - Convivência Google Form + ID Sequencial + Sync de Respostas | 📌 Pendente | ⚠️ Alta |
+| PBI-10 | Fase 10 - Segurança e acesso (OAuth Google, domínios, sessão, auditoria plataformas) | 📌 Proposed | 🚨 Crítica |
 
 ## Legenda de Status
 
@@ -47,4 +48,5 @@
 10. **PBI-8B** - Base Histórica para IA
 11. **PBI-8C** - Operação Interna de Decisão
 12. **PBI-9** - Convivência e transição do Google Form para o sistema
+13. **PBI-10** - Segurança e acesso (OAuth, allowlist de e-mail, inatividade, auditoria GitHub/Vercel/Supabase)
 

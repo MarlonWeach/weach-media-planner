@@ -4,8 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
+import { listarEscopoTagsCotacao } from '@/lib/cotacao/tagsEscopoDashboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,10 +47,10 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const skip = (page - 1) * limit;
 
-    // Base de visibilidade (admin vê todas, comercial vê apenas suas)
-    const baseWhere: any = {};
-
-    if (usuario.role !== 'ADMIN') {
+    // Base de visibilidade: admin e manager (EXTERNO) veem todas; comercial só as suas
+    const baseWhere: Record<string, unknown> = {};
+    const veTodasAsCotacoes = usuario.role === Role.ADMIN || usuario.role === Role.EXTERNO;
+    if (!veTodasAsCotacoes) {
       baseWhere.vendedorId = userId;
     }
 
@@ -106,6 +108,8 @@ export async function GET(request: NextRequest) {
           status: true,
           createdAt: true,
           updatedAt: true,
+          observacoes: true,
+          mixSugerido: true,
           vendedor: {
             select: {
               nome: true,
@@ -143,6 +147,7 @@ export async function GET(request: NextRequest) {
         createdAt: cotacao.createdAt,
         updatedAt: cotacao.updatedAt,
         vendedor: cotacao.vendedor,
+        escopoTags: listarEscopoTagsCotacao(cotacao.observacoes, cotacao.mixSugerido),
       })),
       paginacao: {
         page,

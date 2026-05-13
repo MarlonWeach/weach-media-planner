@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
+import { AppChrome } from "@/components/layout/AppChrome";
 
 export const metadata: Metadata = {
   title: "Weach Pricing & Media Recommender",
@@ -17,7 +18,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className="antialiased">
         <AuthProvider>
-          {children}
+          <AppChrome>{children}</AppChrome>
         </AuthProvider>
         <Analytics />
       </body>
