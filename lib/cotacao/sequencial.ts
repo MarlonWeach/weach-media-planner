@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 const CHAVE_CONFIGURACAO = 'COTACAO_SEQUENCIAL_POR_ANO';
 const ADVISORY_LOCK_ID = 9000001;
@@ -86,14 +87,15 @@ export async function obterProximoIdCotacao(anoReferencia?: number): Promise<str
 
     if (!config) {
       const seed = parseSeedInicialAno(ano);
+      const valorInicial: Prisma.InputJsonValue = {
+        byYear: { [chaveAno(ano)]: { current: seed, seedApplied: seed } },
+        updatedAt: new Date().toISOString(),
+      };
       config = await tx.wp_Configuracao.create({
         data: {
           chave: CHAVE_CONFIGURACAO,
           descricao: 'Contador sequencial por ano das cotações (PBI-9)',
-          valor: {
-            byYear: { [chaveAno(ano)]: { current: seed, seedApplied: seed } },
-            updatedAt: new Date().toISOString(),
-          },
+          valor: valorInicial,
           ativo: true,
         },
         select: { id: true, valor: true },
@@ -116,7 +118,7 @@ export async function obterProximoIdCotacao(anoReferencia?: number): Promise<str
             },
           },
           updatedAt: new Date().toISOString(),
-        },
+        } as Prisma.InputJsonValue,
       },
     });
 

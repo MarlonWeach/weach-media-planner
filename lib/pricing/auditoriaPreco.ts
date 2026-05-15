@@ -1,13 +1,17 @@
 import { prisma } from '@/lib/prisma';
 
+/** ID fixo para cotação “fantasma” usada apenas em logs de auditoria de preço (exige PK após PBI-9). */
+const COTACAO_SISTEMA_AUDITORIA_ID = '00000000-0000-4000-8000-000000000001';
+
 export async function obterOuCriarCotacaoSistema(usuarioId: string) {
   let cotacaoConfig = await prisma.wp_Cotacao.findFirst({
-    where: { clienteNome: '__CONFIG_SYSTEM__' },
+    where: { id: COTACAO_SISTEMA_AUDITORIA_ID },
   });
 
   if (!cotacaoConfig) {
     cotacaoConfig = await prisma.wp_Cotacao.create({
       data: {
+        id: COTACAO_SISTEMA_AUDITORIA_ID,
         clienteNome: '__CONFIG_SYSTEM__',
         clienteSegmento: 'OUTROS',
         urlLp: 'https://config.weach.com',
