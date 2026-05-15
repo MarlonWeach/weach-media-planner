@@ -1,6 +1,12 @@
-import PDFDocument from 'pdfkit/js/pdfkit.standalone';
+import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import type { BriefingLinha } from '@/lib/cotacao/briefingLinhas';
+import {
+  alturaFaixaCabecalhoMarinhoPt,
+  desenharFaixaCabecalhoMarinho,
+  desenharLogoWeachNoCabecalho,
+  PDF_COR_SUBTITULO_CABECALHO,
+} from '@/lib/pdf/cabecalhoWeachPdf';
 
 type PDFKitDocument = InstanceType<typeof PDFDocument>;
 
@@ -62,20 +68,29 @@ export async function gerarBriefingPDF(
       const stream = fs.createWriteStream(outputPath);
       doc.pipe(stream);
 
-      doc.fontSize(20).fillColor(CORES.PRIMARY_DARK).font('Helvetica-Bold').text('Weach');
+      const margem = 40;
+      const alturaFaixa = alturaFaixaCabecalhoMarinhoPt();
+      desenharFaixaCabecalhoMarinho(doc, alturaFaixa);
+
+      const logoY = 20;
+      const logoAltura = desenharLogoWeachNoCabecalho(doc, {
+        x: margem,
+        y: logoY,
+        maxWidthPx: 200,
+        maxHeightPx: 40,
+      });
+
       doc
-        .fontSize(12)
-        .fillColor(CORES.GRAY)
+        .fontSize(11)
+        .fillColor(PDF_COR_SUBTITULO_CABECALHO)
         .font('Helvetica')
-        .text('Briefing da Cotação (Espelho de Perguntas e Respostas)');
-      doc.moveDown(0.5);
-      doc
-        .moveTo(40, doc.y)
-        .lineTo(555, doc.y)
-        .strokeColor(CORES.PRIMARY)
-        .lineWidth(1.5)
-        .stroke();
-      doc.moveDown(0.8);
+        .text(
+          'Briefing da Cotação (Espelho de Perguntas e Respostas)',
+          margem,
+          logoY + logoAltura + 6
+        );
+
+      doc.y = alturaFaixa + 18;
 
       const startX = 40;
       const widthLabel = 200;

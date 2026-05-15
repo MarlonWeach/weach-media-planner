@@ -3,6 +3,8 @@
  * POST /api/cotacao/{id}/pdf
  */
 
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, podeAcessarCotacao } from '@/lib/utils/auth';

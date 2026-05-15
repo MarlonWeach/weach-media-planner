@@ -56,6 +56,18 @@ function buildSecurityHeaders() {
 const nextConfig = {
   reactStrictMode: true,
 
+  /** PDFKit usa `fs` e fontes em disco — não empacotar com webpack (evita pdfkit.standalone). */
+  experimental: {
+    serverComponentsExternalPackages: ['pdfkit'],
+  },
+
+  webpack: (config, { isServer }) => {
+    if (isServer && Array.isArray(config.externals)) {
+      config.externals.push('pdfkit');
+    }
+    return config;
+  },
+
   async headers() {
     return [
       {

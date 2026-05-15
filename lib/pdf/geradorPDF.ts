@@ -4,14 +4,14 @@
  * Gera PDF comercial com identidade visual Weach
  */
 
-import PDFDocument from 'pdfkit/js/pdfkit.standalone';
+import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import type { DadosCotacao } from '@/lib/cotacao/planoMidiaTabelaComercial';
 import {
-  calcularTamanhoLogoPreservandoProporcao,
-  caminhoLogoWeach,
-  pxParaPontosPdf,
-} from '@/lib/branding/logoWeach';
+  alturaFaixaCabecalhoMarinhoPt,
+  desenharFaixaCabecalhoMarinho,
+  desenharLogoWeachNoCabecalho,
+} from '@/lib/pdf/cabecalhoWeachPdf';
 import {
   construirMatrizEstimativas,
   construirTabelaPlanoMidia,
@@ -75,37 +75,17 @@ function garantirEspaco(doc: PDFKitDocument, espacoNecessario: number) {
 
 function adicionarCabecalho(doc: PDFKitDocument, dados: DadosCotacao) {
   const margemEsquerda = 50;
-  let y = 42;
+  const alturaFaixa = alturaFaixaCabecalhoMarinhoPt();
 
-  const logoPath = caminhoLogoWeach();
-  if (logoPath) {
-    const tamanhoLogo = calcularTamanhoLogoPreservandoProporcao(logoPath, {
-      maxWidthPx: 220,
-      maxHeightPx: 44,
-    });
-    if (tamanhoLogo) {
-      doc.image(logoPath, margemEsquerda, y, {
-        width: pxParaPontosPdf(tamanhoLogo.width),
-        height: pxParaPontosPdf(tamanhoLogo.height),
-      });
-      y += pxParaPontosPdf(tamanhoLogo.height) + 10;
-    }
-  } else {
-    doc
-      .fontSize(24)
-      .fillColor(CORES.PRIMARY_DARK)
-      .font('Helvetica-Bold')
-      .text('Weach', margemEsquerda, y);
-    y += 28;
-    doc
-      .fontSize(12)
-      .fillColor(CORES.GRAY)
-      .font('Helvetica')
-      .text('Pricing & Media Recommender', margemEsquerda, y);
-    y += 22;
-  }
+  desenharFaixaCabecalhoMarinho(doc, alturaFaixa);
+  desenharLogoWeachNoCabecalho(doc, {
+    x: margemEsquerda,
+    y: 18,
+    maxWidthPx: 220,
+    maxHeightPx: 44,
+  });
 
-  const linhaY = y + 6;
+  const linhaY = alturaFaixa + 10;
   doc
     .moveTo(margemEsquerda, linhaY)
     .lineTo(545, linhaY)

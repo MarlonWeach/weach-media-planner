@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { obterUserIdDoRequest } from '@/lib/utils/auth';
+import { obterUserIdDoRequest, podeAcessarCotacao } from '@/lib/utils/auth';
 import { sincronizarHistoricoComMixStep4 } from '@/lib/performance/historico';
 import { obterProximoNumeroSequencialCotacao } from '@/lib/cotacao/sequencial';
 import { mergeObservacoesComStep1 } from '@/lib/cotacao/observacoesMerge';
@@ -107,8 +107,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Verifica permissão
-      if (cotacao.vendedorId !== userId) {
+      const temPermissao = await podeAcessarCotacao(userId, cotacao.vendedorId);
+      if (!temPermissao) {
         return NextResponse.json(
           { success: false, error: 'Acesso negado' },
           { status: 403 }

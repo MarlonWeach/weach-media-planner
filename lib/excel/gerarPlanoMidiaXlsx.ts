@@ -3,7 +3,10 @@ import type { DadosCotacao } from '@/lib/cotacao/planoMidiaTabelaComercial';
 import {
   calcularTamanhoLogoPreservandoProporcao,
   caminhoLogoWeach,
+  LOGO_EXCEL_ESQUERDA_POL,
+  LOGO_EXCEL_SUPERIOR_POL,
 } from '@/lib/branding/logoWeach';
+import { calcularAncoraTlPorPol } from '@/lib/excel/ancoraImagemPorPol';
 import {
   construirMatrizEstimativas,
   diasCorridosPeriodo,
@@ -122,21 +125,26 @@ function definirParResumoHK(
   cK.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
 }
 
-function aplicarEstiloU4(ws: ExcelJS.Worksheet, row: number) {
-  ws.mergeCells(`U${row}:V${row}`);
-  const c = ws.getCell(`U${row}`);
+/** Valor do resumo (antigo U:V) — agora P:Q, alinhado ao bloco M:Q. */
+function aplicarEstiloValorResumoLateral(ws: ExcelJS.Worksheet, row: number) {
+  ws.mergeCells(`P${row}:Q${row}`);
+  const c = ws.getCell(`P${row}`);
   c.font = { name: 'Calibri', size: 10 };
   c.fill = FILL_RESUMO_FUNDO;
   c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 }
 
-function inserirLogoPlanilha(workbook: ExcelJS.Workbook, ws: ExcelJS.Worksheet): void {
+function inserirLogoPlanilha(
+  workbook: ExcelJS.Workbook,
+  ws: ExcelJS.Worksheet,
+  alturaLinhaPadraoPt: number
+): void {
   const logoPath = caminhoLogoWeach();
   if (!logoPath) return;
 
   const tamanhoLogo = calcularTamanhoLogoPreservandoProporcao(logoPath, {
-    maxWidthPx: 240,
-    maxHeightPx: 52,
+    maxWidthPx: 200,
+    maxHeightPx: 48,
   });
   if (!tamanhoLogo) return;
 
@@ -145,11 +153,14 @@ function inserirLogoPlanilha(workbook: ExcelJS.Workbook, ws: ExcelJS.Worksheet):
     extension: 'png',
   });
 
-  const alturaLinhaPt = Math.max(ALTURA_LINHA_PADRAO, Math.ceil(tamanhoLogo.height * 0.75) + 4);
-  ws.getRow(2).height = alturaLinhaPt;
+  const tl = calcularAncoraTlPorPol(ws, {
+    esquerdaPol: LOGO_EXCEL_ESQUERDA_POL,
+    superiorPol: LOGO_EXCEL_SUPERIOR_POL,
+    alturaLinhaPadraoPt,
+  });
 
   ws.addImage(imageId, {
-    tl: { col: 1.05, row: 0.2 },
+    tl,
     ext: { width: tamanhoLogo.width, height: tamanhoLogo.height },
   });
 }
@@ -171,7 +182,7 @@ export async function gerarBufferPlanoMidiaXlsx(
     ws.getColumn(i + 2).width = w;
   });
 
-  inserirLogoPlanilha(workbook, ws);
+  inserirLogoPlanilha(workbook, ws, ALTURA_LINHA_PADRAO);
 
   preencherRangeAzulBranco(ws, 3, 9, 2, 10);
 
@@ -183,41 +194,41 @@ export async function gerarBufferPlanoMidiaXlsx(
   definirParResumoHK(ws, 8, 'OBJETIVO', formatarObjetivo(dados.objetivo));
   definirParResumoHK(ws, 9, 'KPI PRINCIPAL', textoKpiPrincipalCotacao(dados));
 
-  ws.mergeCells('R3:V3');
-  const titResumo = ws.getCell('R3');
+  ws.mergeCells('M3:Q3');
+  const titResumo = ws.getCell('M3');
   titResumo.value = 'RESUMO DA PROPOSTA';
   titResumo.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   titResumo.fill = FILL_CABECALHO;
   titResumo.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  ws.mergeCells('R4:T4');
-  ws.getCell('R4').value = 'PERÍODO';
-  ws.getCell('R4').font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-  ws.getCell('R4').fill = FILL_CABECALHO;
-  ws.getCell('R4').alignment = { horizontal: 'center', vertical: 'middle' };
-  ws.mergeCells('U4:V4');
+  ws.mergeCells('M4:O4');
+  ws.getCell('M4').value = 'PERÍODO';
+  ws.getCell('M4').font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  ws.getCell('M4').fill = FILL_CABECALHO;
+  ws.getCell('M4').alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.mergeCells('P4:Q4');
   const dias = diasCorridosPeriodo(dados.dataInicio, dados.dataFim);
-  ws.getCell('U4').value = dias != null ? `${dias} dias corridos` : '—';
-  ws.getCell('U4').font = { name: 'Calibri', size: 10 };
-  ws.getCell('U4').fill = FILL_RESUMO_FUNDO;
-  ws.getCell('U4').alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  ws.getCell('P4').value = dias != null ? `${dias} dias corridos` : '—';
+  ws.getCell('P4').font = { name: 'Calibri', size: 10 };
+  ws.getCell('P4').fill = FILL_RESUMO_FUNDO;
+  ws.getCell('P4').alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 
-  preencherRangeAzulBranco(ws, 5, 8, 18, 20);
+  preencherRangeAzulBranco(ws, 5, 8, 13, 15);
   for (let rr = 5; rr <= 8; rr += 1) {
-    aplicarEstiloU4(ws, rr);
+    aplicarEstiloValorResumoLateral(ws, rr);
   }
 
-  ws.mergeCells('R9:T9');
-  ws.getCell('R9').value = 'INVESTIMENTO';
-  ws.getCell('R9').font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-  ws.getCell('R9').fill = FILL_CABECALHO;
-  ws.getCell('R9').alignment = { horizontal: 'center', vertical: 'middle' };
-  ws.mergeCells('U9:V9');
-  ws.getCell('U9').value = Number(dados.budget);
-  ws.getCell('U9').numFmt = '"R$" #,##0.00';
-  ws.getCell('U9').font = { name: 'Calibri', size: 10, bold: true };
-  ws.getCell('U9').fill = FILL_RESUMO_FUNDO;
-  ws.getCell('U9').alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.mergeCells('M9:O9');
+  ws.getCell('M9').value = 'INVESTIMENTO';
+  ws.getCell('M9').font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  ws.getCell('M9').fill = FILL_CABECALHO;
+  ws.getCell('M9').alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.mergeCells('P9:Q9');
+  ws.getCell('P9').value = Number(dados.budget);
+  ws.getCell('P9').numFmt = '"R$" #,##0.00';
+  ws.getCell('P9').font = { name: 'Calibri', size: 10, bold: true };
+  ws.getCell('P9').fill = FILL_RESUMO_FUNDO;
+  ws.getCell('P9').alignment = { horizontal: 'center', vertical: 'middle' };
 
   const r12 = 12;
   ws.mergeCells(`B${r12}:D${r12}`);

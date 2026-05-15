@@ -4,6 +4,8 @@
  * sem alterar status da cotação nem gerar PDF comercial. Usado após “Baixar plano”.
  */
 
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';

@@ -373,9 +373,6 @@ export function WizardStep4({
         throw new Error('Sessão expirada. Faça login novamente.');
       }
 
-      // TODO: Obter vendedorId do contexto de autenticação
-      const vendedorId = '00000000-0000-0000-0000-000000000000'; // Placeholder
-
       const regiaoNormalizada = normalizarRegiaoParaMotor(dadosPassos.step3);
       const observacoesCompletas = montarObservacoesCompletas(dadosPassos);
       const canaisSelecionados = extrairCanaisSelecionados(dadosPassos.step2);
@@ -410,7 +407,6 @@ export function WizardStep4({
           risco: dadosPassos.step2.risco || 'MEDIA',
           aceitaModeloHibrido: dadosPassos.step2.aceitaModeloHibrido || false,
           observacoes: observacoesCompletas,
-          vendedorId,
           canaisSelecionados,
           formatosSelecionados,
         }),
