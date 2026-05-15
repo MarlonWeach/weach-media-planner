@@ -3,12 +3,17 @@ import { z } from 'zod';
 import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth/password';
+import {
+  emailPossuiDominioPermitidoParaLogin,
+  MENSAGEM_EMAIL_DOMINIO_NEGADO,
+} from '@/lib/auth/emailDomainAllowlist';
+import { mensagemSenhaMinima, SENHA_MIN_CARACTERES } from '@/lib/auth/passwordPolicy';
 
 const schemaCompleteOnboarding = z
   .object({
     token: z.string().min(1, 'Token é obrigatório'),
     email: z.string().email('Email inválido'),
-    senha: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
+    senha: z.string().min(SENHA_MIN_CARACTERES, mensagemSenhaMinima()),
     confirmarSenha: z.string().min(1, 'Confirmação de senha é obrigatória'),
   })
   .refine((value) => value.senha === value.confirmarSenha, {
@@ -20,6 +25,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const dados = schemaCompleteOnboarding.parse(body);
+    const emailNormalizado = dados.email.trim().toLowerCase();
+
+    if (!emailPossuiDominioPermitidoParaLogin(emailNormalizado)) {
+      return NextResponse.json({ success: false, error: MENSAGEM_EMAIL_DOMINIO_NEGADO }, { status: 403 });
+    }
+
     const chave = `onboarding_solicitante:${dados.token}`;
 
     const config = await prisma.wp_Configuracao.findUnique({
@@ -46,7 +57,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (String(valor.email).toLowerCase() !== dados.email.toLowerCase()) {
+    if (String(valor.email).toLowerCase() !== emailNormalizado) {
       return NextResponse.json(
         { success: false, error: 'Email não corresponde ao convite.' },
         { status: 400 }
@@ -89,6 +100,7 @@ export async function POST(request: NextRequest) {
         where: { id: usuarioExistente.id },
         data: {
           senhaHash,
+          senhaLocalConfigurada: true,
           role: Role.COMERCIAL,
           ativo: true,
         },
@@ -99,6 +111,7 @@ export async function POST(request: NextRequest) {
           nome: solicitante.nome,
           email: solicitante.email.toLowerCase(),
           senhaHash,
+          senhaLocalConfigurada: true,
           role: Role.COMERCIAL,
           ativo: true,
         },

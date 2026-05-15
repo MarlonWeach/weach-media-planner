@@ -59,8 +59,8 @@ const schemaStep3 = z.object({
     .number()
     .min(1000, 'Budget mínimo é R$ 1.000,00')
     .max(10000000, 'Budget máximo é R$ 10.000.000,00'),
-  dataInicio: z.string().min(1, 'Data de início é obrigatória'),
-  dataFim: z.string().min(1, 'Data de término é obrigatória'),
+  dataInicio: z.string().optional(),
+  dataFim: z.string().optional(),
   tipoRegiao: z.enum(['NACIONAL', 'ESTADO', 'CIDADES']),
   estadosSelecionados: z.array(z.string()).optional(),
   cidades: z.string().optional(),
@@ -172,8 +172,6 @@ export function WizardStep3({
   const podeAvancar =
     Number.isFinite(budget) &&
     Number(budget) >= 1000 &&
-    !!dataInicio &&
-    !!dataFim &&
     !!tipoRegiao &&
     regiaoValida;
 
@@ -235,8 +233,8 @@ export function WizardStep3({
         <FormField
           label="Data de Início"
           name="dataInicio"
-          required
           error={errors.dataInicio?.message}
+          helpText="Opcional — pode ser definido depois"
         >
           <input
             type="date"
@@ -250,8 +248,8 @@ export function WizardStep3({
         <FormField
           label="Data de Término"
           name="dataFim"
-          required
           error={errors.dataFim?.message}
+          helpText="Opcional — pode ser definido depois"
         >
           <input
             type="date"

@@ -15,8 +15,8 @@ export interface DadosCotacao {
   clienteSegmento: string;
   objetivo: string;
   budget: number;
-  dataInicio: Date;
-  dataFim: Date;
+  dataInicio?: Date | null;
+  dataFim?: Date | null;
   regiao: string;
   explicacaoComercial?: string;
   mix: Array<{
@@ -79,12 +79,34 @@ export function formatarNumero(valor: number): string {
   }).format(valor);
 }
 
-export function formatarData(data: Date): string {
+export function formatarData(data: Date | null | undefined): string {
+  if (!data) return '—';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
   }).format(data);
+}
+
+export function textoPeriodoCotacao(
+  dataInicio?: Date | null,
+  dataFim?: Date | null
+): string {
+  if (!dataInicio && !dataFim) return 'Período: a definir';
+  if (dataInicio && dataFim) {
+    return `Período: ${formatarData(dataInicio)} a ${formatarData(dataFim)}`;
+  }
+  if (dataInicio) return `Período: a partir de ${formatarData(dataInicio)}`;
+  return `Período: até ${formatarData(dataFim)}`;
+}
+
+export function diasCorridosPeriodo(
+  inicio?: Date | null,
+  fim?: Date | null
+): number | null {
+  if (!inicio || !fim) return null;
+  const ms = fim.getTime() - inicio.getTime();
+  return Math.max(1, Math.ceil(ms / 86400000) + 1);
 }
 
 export function formatarSegmento(segmento: string): string {

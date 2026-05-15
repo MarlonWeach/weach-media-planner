@@ -156,8 +156,12 @@ export async function POST(request: NextRequest) {
 
       if (dados.step3) {
         dadosAtualizacao.budget = dados.step3.budget;
-        dadosAtualizacao.dataInicio = new Date(dados.step3.dataInicio);
-        dadosAtualizacao.dataFim = new Date(dados.step3.dataFim);
+        dadosAtualizacao.dataInicio = dados.step3.dataInicio?.trim()
+          ? new Date(dados.step3.dataInicio)
+          : null;
+        dadosAtualizacao.dataFim = dados.step3.dataFim?.trim()
+          ? new Date(dados.step3.dataFim)
+          : null;
         dadosAtualizacao.regiao = normalizarRegiao(dados.step3) as any;
       }
 
@@ -221,12 +225,12 @@ export async function POST(request: NextRequest) {
           urlLp: dados.step1.urlLp || 'https://exemplo.com',
           objetivo: dados.step2?.objetivo || 'AWARENESS',
           budget: dados.step3?.budget || 1000,
-          dataInicio: dados.step3?.dataInicio
+          dataInicio: dados.step3?.dataInicio?.trim()
             ? new Date(dados.step3.dataInicio)
-            : new Date(),
-          dataFim: dados.step3?.dataFim
+            : null,
+          dataFim: dados.step3?.dataFim?.trim()
             ? new Date(dados.step3.dataFim)
-            : new Date(),
+            : null,
           regiao: normalizarRegiao(dados.step3) as any,
           maturidadeDigital: dados.step2?.maturidadeDigital || 'MEDIA',
           risco: dados.step2?.risco || 'MEDIA',

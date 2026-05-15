@@ -8,9 +8,15 @@ import PDFDocument from 'pdfkit/js/pdfkit.standalone';
 import fs from 'fs';
 import type { DadosCotacao } from '@/lib/cotacao/planoMidiaTabelaComercial';
 import {
+  calcularTamanhoLogoPreservandoProporcao,
+  caminhoLogoWeach,
+  pxParaPontosPdf,
+} from '@/lib/branding/logoWeach';
+import {
   construirMatrizEstimativas,
   construirTabelaPlanoMidia,
   formatarData,
+  textoPeriodoCotacao,
   textoResumoExecutivo,
 } from '@/lib/cotacao/planoMidiaTabelaComercial';
 
@@ -68,21 +74,41 @@ function garantirEspaco(doc: PDFKitDocument, espacoNecessario: number) {
 }
 
 function adicionarCabecalho(doc: PDFKitDocument, dados: DadosCotacao) {
-  doc
-    .fontSize(24)
-    .fillColor(CORES.PRIMARY_DARK)
-    .font('Helvetica-Bold')
-    .text('Weach', 50, 50);
+  const margemEsquerda = 50;
+  let y = 42;
 
-  doc
-    .fontSize(18)
-    .fillColor(CORES.GRAY)
-    .font('Helvetica')
-    .text('Pricing & Media Recommender', 50, 75);
+  const logoPath = caminhoLogoWeach();
+  if (logoPath) {
+    const tamanhoLogo = calcularTamanhoLogoPreservandoProporcao(logoPath, {
+      maxWidthPx: 220,
+      maxHeightPx: 44,
+    });
+    if (tamanhoLogo) {
+      doc.image(logoPath, margemEsquerda, y, {
+        width: pxParaPontosPdf(tamanhoLogo.width),
+        height: pxParaPontosPdf(tamanhoLogo.height),
+      });
+      y += pxParaPontosPdf(tamanhoLogo.height) + 10;
+    }
+  } else {
+    doc
+      .fontSize(24)
+      .fillColor(CORES.PRIMARY_DARK)
+      .font('Helvetica-Bold')
+      .text('Weach', margemEsquerda, y);
+    y += 28;
+    doc
+      .fontSize(12)
+      .fillColor(CORES.GRAY)
+      .font('Helvetica')
+      .text('Pricing & Media Recommender', margemEsquerda, y);
+    y += 22;
+  }
 
+  const linhaY = y + 6;
   doc
-    .moveTo(50, 110)
-    .lineTo(545, 110)
+    .moveTo(margemEsquerda, linhaY)
+    .lineTo(545, linhaY)
     .strokeColor(CORES.PRIMARY)
     .lineWidth(2)
     .stroke();
@@ -91,24 +117,22 @@ function adicionarCabecalho(doc: PDFKitDocument, dados: DadosCotacao) {
     .fontSize(18)
     .fillColor(CORES.PRIMARY_DARK)
     .font('Helvetica-Bold')
-    .text('Proposta de Plano de Mídia Digital', 50, 126, { align: 'center' });
+    .text('Proposta de Plano de Mídia Digital', margemEsquerda, linhaY + 16, { align: 'center' });
 
   doc
     .fontSize(14)
     .fillColor(CORES.GRAY)
     .font('Helvetica')
-    .text(`Cliente: ${dados.clienteNome}`, 50, 154, { align: 'center' });
+    .text(`Cliente: ${dados.clienteNome}`, margemEsquerda, linhaY + 44, { align: 'center' });
 
   doc
     .fontSize(12)
-    .text(
-      `Período: ${formatarData(dados.dataInicio)} a ${formatarData(dados.dataFim)}`,
-      50,
-      172,
-      { align: 'center' }
-    );
+    .text(textoPeriodoCotacao(dados.dataInicio, dados.dataFim), margemEsquerda, linhaY + 62, {
+      align: 'center',
+    });
 
-  doc.moveDown(1.2);
+  doc.y = linhaY + 88;
+  doc.moveDown(0.4);
 }
 
 function adicionarResumoExecutivo(doc: PDFKitDocument, dados: DadosCotacao) {

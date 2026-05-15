@@ -2,11 +2,12 @@
  * Gerenciamento de sessões e tokens JWT
  */
 
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 import { Role } from '@prisma/client';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRES_IN = '7d'; // 7 dias
+/** Duração do JWT (ex.: `1h`, `7d`). Produção pode alinhar à política de sessão. */
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as NonNullable<SignOptions['expiresIn']>;
 
 export interface TokenPayload {
   userId: string;

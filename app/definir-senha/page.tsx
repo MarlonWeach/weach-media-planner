@@ -3,6 +3,8 @@
 import { Suspense } from 'react';
 import { FormEvent, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { TEXTO_DOMINIOS_PERMITIDOS_LOGIN } from '@/lib/auth/emailDomainAllowlist';
+import { SENHA_MIN_CARACTERES } from '@/lib/auth/passwordPolicy';
 
 function DefinirSenhaForm() {
   const searchParams = useSearchParams();
@@ -52,6 +54,7 @@ function DefinirSenhaForm() {
         <p className="text-sm text-gray-600">
           Informe o seu e-mail e defina uma senha para acessar o sistema de cotações da Weach.
         </p>
+        <p className="text-xs text-gray-500">{TEXTO_DOMINIOS_PERMITIDOS_LOGIN}</p>
         {!token && (
           <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             Link inválido: token não encontrado.
@@ -78,7 +81,7 @@ function DefinirSenhaForm() {
             onChange={(event) => setSenha(event.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             placeholder="Nova senha"
-            minLength={8}
+            minLength={SENHA_MIN_CARACTERES}
             required
           />
           <input
@@ -87,7 +90,7 @@ function DefinirSenhaForm() {
             onChange={(event) => setConfirmarSenha(event.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             placeholder="Confirmar senha"
-            minLength={8}
+            minLength={SENHA_MIN_CARACTERES}
             required
           />
           <button

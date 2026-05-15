@@ -99,8 +99,14 @@ const schemaCriarCotacao = z.object({
   ),
   objetivo: z.enum(['AWARENESS', 'CONSIDERACAO', 'LEADS', 'VENDAS']),
   budget: z.number().min(1000),
-  dataInicio: z.string(),
-  dataFim: z.string(),
+  dataInicio: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional()
+  ),
+  dataFim: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional()
+  ),
   regiao: z.enum(['NACIONAL', 'SP_CAPITAL', 'SUDESTE_EXCETO_SP', 'SUL', 'CENTRO_OESTE', 'NORDESTE', 'NORTE', 'CIDADES_MENORES']),
   maturidadeDigital: z.enum(['BAIXA', 'MEDIA', 'ALTA']),
   risco: z.enum(['BAIXA', 'MEDIA', 'ALTA']),
@@ -234,8 +240,8 @@ export async function POST(request: NextRequest) {
         urlLp: dados.urlLp,
         objetivo: dados.objetivo,
         budget: dados.budget,
-        dataInicio: new Date(dados.dataInicio),
-        dataFim: new Date(dados.dataFim),
+        dataInicio: dados.dataInicio ? new Date(dados.dataInicio) : null,
+        dataFim: dados.dataFim ? new Date(dados.dataFim) : null,
         regiao: dados.regiao,
         maturidadeDigital: dados.maturidadeDigital,
         risco: dados.risco,

@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { extractTokenFromHeader, verifyToken } from '@/lib/auth/session';
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
+import { mensagemSenhaMinima, SENHA_MIN_CARACTERES } from '@/lib/auth/passwordPolicy';
 
 const schemaChangePassword = z
   .object({
-    senhaAtual: z.string().min(1, 'Senha atual é obrigatória'),
-    novaSenha: z.string().min(8, 'Nova senha deve ter pelo menos 8 caracteres'),
+    senhaAtual: z.string().optional().default(''),
+    novaSenha: z.string().min(SENHA_MIN_CARACTERES, mensagemSenhaMinima()),
     confirmarNovaSenha: z.string().min(1, 'Confirmação da nova senha é obrigatória'),
   })
   .refine((value) => value.novaSenha === value.confirmarNovaSenha, {
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     const usuario = await prisma.wp_Usuario.findUnique({
       where: { id: payload.userId },
-      select: { id: true, ativo: true, senhaHash: true },
+      select: { id: true, ativo: true, senhaHash: true, senhaLocalConfigurada: true },
     });
 
     if (!usuario || !usuario.ativo) {
@@ -49,18 +50,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const senhaAtualValida = await verifyPassword(dados.senhaAtual, usuario.senhaHash);
-    if (!senhaAtualValida) {
-      return NextResponse.json(
-        { success: false, error: 'Senha atual inválida' },
-        { status: 400 }
-      );
+    if (usuario.senhaLocalConfigurada) {
+      const atual = dados.senhaAtual.trim();
+      if (!atual) {
+        return NextResponse.json(
+          { success: false, error: 'Senha atual é obrigatória' },
+          { status: 400 }
+        );
+      }
+      const senhaAtualValida = await verifyPassword(atual, usuario.senhaHash);
+      if (!senhaAtualValida) {
+        return NextResponse.json(
+          { success: false, error: 'Senha atual inválida' },
+          { status: 400 }
+        );
+      }
     }
 
     const novoHash = await hashPassword(dados.novaSenha);
     await prisma.wp_Usuario.update({
       where: { id: usuario.id },
-      data: { senhaHash: novoHash },
+      data: { senhaHash: novoHash, senhaLocalConfigurada: true },
     });
 
     return NextResponse.json({

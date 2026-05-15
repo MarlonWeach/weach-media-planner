@@ -5,11 +5,12 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth/password';
 import { obterUserIdDoRequest, usuarioTemRole } from '@/lib/utils/auth';
 import { mapDbRoleToUi, mapUiRoleToDb } from '@/lib/utils/roles';
+import { mensagemSenhaMinima, SENHA_MIN_CARACTERES } from '@/lib/auth/passwordPolicy';
 
 const schemaAtualizarUsuario = z.object({
   role: z.enum(['ADMIN', 'MANAGER', 'COMERCIAL']).optional(),
   ativo: z.boolean().optional(),
-  senha: z.string().min(6, 'Senha mínima de 6 caracteres').optional(),
+  senha: z.string().min(SENHA_MIN_CARACTERES, mensagemSenhaMinima()).optional(),
 });
 
 export async function PATCH(
@@ -38,6 +39,7 @@ export async function PATCH(
       role?: Role;
       ativo?: boolean;
       senhaHash?: string;
+      senhaLocalConfigurada?: boolean;
     } = {};
 
     if (dados.role) {
@@ -48,6 +50,7 @@ export async function PATCH(
     }
     if (dados.senha) {
       updateData.senhaHash = await hashPassword(dados.senha);
+      updateData.senhaLocalConfigurada = true;
     }
 
     const usuarioAtualizado = await prisma.wp_Usuario.update({

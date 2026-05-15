@@ -9,6 +9,10 @@ import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth/password';
 import { generateToken } from '@/lib/auth/session';
 import { mapDbRoleToUi } from '@/lib/utils/roles';
+import {
+  emailPossuiDominioPermitidoParaLogin,
+  MENSAGEM_EMAIL_DOMINIO_NEGADO,
+} from '@/lib/auth/emailDomainAllowlist';
 
 const schemaLogin = z.object({
   email: z.string().email('Email inválido'),
@@ -19,10 +23,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const dados = schemaLogin.parse(body);
+    const emailNormalizado = dados.email.trim().toLowerCase();
+
+    if (!emailPossuiDominioPermitidoParaLogin(emailNormalizado)) {
+      return NextResponse.json({ success: false, error: MENSAGEM_EMAIL_DOMINIO_NEGADO }, { status: 403 });
+    }
 
     // Busca usuário
     const usuario = await prisma.wp_Usuario.findUnique({
-      where: { email: dados.email },
+      where: { email: emailNormalizado },
     });
 
     if (!usuario) {
@@ -65,6 +74,7 @@ export async function POST(request: NextRequest) {
         nome: usuario.nome,
         email: usuario.email,
         role: mapDbRoleToUi(usuario.role),
+        senhaLocalConfigurada: usuario.senhaLocalConfigurada,
       },
     });
   } catch (error) {

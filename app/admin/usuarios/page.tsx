@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { SENHA_MIN_CARACTERES } from '@/lib/auth/passwordPolicy';
 
 type RoleUI = 'ADMIN' | 'MANAGER' | 'COMERCIAL';
 
@@ -81,8 +82,8 @@ export default function AdminUsuariosPage() {
       setErro('Selecione um solicitante para criar o usuário.');
       return;
     }
-    if (!novaSenha || novaSenha.length < 6) {
-      setErro('Defina uma senha com pelo menos 6 caracteres.');
+    if (!novaSenha || novaSenha.length < SENHA_MIN_CARACTERES) {
+      setErro(`Defina uma senha com pelo menos ${SENHA_MIN_CARACTERES} caracteres.`);
       return;
     }
 
@@ -231,6 +232,7 @@ export default function AdminUsuariosPage() {
                 className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg"
                 placeholder="Senha inicial"
                 autoComplete="new-password"
+                minLength={SENHA_MIN_CARACTERES}
               />
               <button
                 type="button"

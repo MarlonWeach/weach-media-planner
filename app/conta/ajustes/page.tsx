@@ -3,10 +3,11 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { SENHA_MIN_CARACTERES } from '@/lib/auth/passwordPolicy';
 
 export default function ContaAjustesPage() {
   const router = useRouter();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, usuario, refreshUsuario } = useAuth();
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarNovaSenha, setConfirmarNovaSenha] = useState('');
@@ -22,6 +23,14 @@ export default function ContaAjustesPage() {
       router.push('/login?redirect=/conta/ajustes');
     }
   }, [loading, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void refreshUsuario();
+    }
+  }, [isAuthenticated, refreshUsuario]);
+
+  const primeiraDefinicaoSenha = usuario?.senhaLocalConfigurada === false;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -45,10 +54,13 @@ export default function ContaAjustesPage() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Erro ao alterar senha');
       }
-      setSucesso('Senha alterada com sucesso.');
+      setSucesso(
+        primeiraDefinicaoSenha ? 'Senha definida com sucesso.' : 'Senha alterada com sucesso.'
+      );
       setSenhaAtual('');
       setNovaSenha('');
       setConfirmarNovaSenha('');
+      await refreshUsuario();
     } catch (error) {
       setErro(error instanceof Error ? error.message : 'Erro ao alterar senha.');
     } finally {
@@ -73,7 +85,11 @@ export default function ContaAjustesPage() {
         <div className="mb-8">
           <div>
             <h1 className="text-3xl font-bold text-primary-dark mb-2">Ajustes da Conta</h1>
-            <p className="text-gray-600">Altere sua senha de acesso</p>
+            <p className="text-gray-600">
+              {primeiraDefinicaoSenha
+                ? 'Defina uma senha para também poder entrar com e-mail e senha (opcional mas recomendado).'
+                : 'Altere sua senha de acesso'}
+            </p>
           </div>
         </div>
 
@@ -89,26 +105,28 @@ export default function ContaAjustesPage() {
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Senha atual</label>
-              <div className="relative">
-                <input
-                  type={mostrarSenhaAtual ? 'text' : 'password'}
-                  value={senhaAtual}
-                  onChange={(event) => setSenhaAtual(event.target.value)}
-                  className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setMostrarSenhaAtual((prev) => !prev)}
-                  className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-gray-700"
-                  aria-label={mostrarSenhaAtual ? 'Ocultar senha atual' : 'Mostrar senha atual'}
-                >
-                  {mostrarSenhaAtual ? 'Ocultar' : 'Mostrar'}
-                </button>
+            {!primeiraDefinicaoSenha && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Senha atual</label>
+                <div className="relative">
+                  <input
+                    type={mostrarSenhaAtual ? 'text' : 'password'}
+                    value={senhaAtual}
+                    onChange={(event) => setSenhaAtual(event.target.value)}
+                    className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarSenhaAtual((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-gray-700"
+                    aria-label={mostrarSenhaAtual ? 'Ocultar senha atual' : 'Mostrar senha atual'}
+                  >
+                    {mostrarSenhaAtual ? 'Ocultar' : 'Mostrar'}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Nova senha</label>
               <div className="relative">
@@ -117,7 +135,7 @@ export default function ContaAjustesPage() {
                   value={novaSenha}
                   onChange={(event) => setNovaSenha(event.target.value)}
                   className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg"
-                  minLength={8}
+                  minLength={SENHA_MIN_CARACTERES}
                   required
                 />
                 <button
@@ -138,7 +156,7 @@ export default function ContaAjustesPage() {
                   value={confirmarNovaSenha}
                   onChange={(event) => setConfirmarNovaSenha(event.target.value)}
                   className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg"
-                  minLength={8}
+                  minLength={SENHA_MIN_CARACTERES}
                   required
                 />
                 <button
@@ -168,7 +186,7 @@ export default function ContaAjustesPage() {
                 disabled={salvando}
                 className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50"
               >
-                {salvando ? 'Salvando...' : 'Alterar senha'}
+                {salvando ? 'Salvando...' : primeiraDefinicaoSenha ? 'Definir senha' : 'Alterar senha'}
               </button>
             </div>
           </form>

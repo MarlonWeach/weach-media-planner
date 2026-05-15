@@ -5,8 +5,8 @@ interface SyncCotacaoInput {
   id: string;
   numeroSequencial?: number | null;
   createdAt?: Date;
-  dataInicio?: Date;
-  dataFim?: Date;
+  dataInicio?: Date | null;
+  dataFim?: Date | null;
   clienteNome: string;
   clienteSegmento: string;
   urlLp?: string;
@@ -53,7 +53,7 @@ function toCellValue(value: unknown): string {
   return String(value);
 }
 
-function formatDateBr(value?: Date): string {
+function formatDateBr(value?: Date | null): string {
   if (!value) return '';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',

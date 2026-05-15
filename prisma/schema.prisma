@@ -13,6 +13,13 @@ model wp_Usuario {
   nome      String
   email     String                 @unique
   senhaHash String
+  /** Subject (`sub`) da conta Google vinculada; primeiro login OAuth grava o vínculo. */
+  googleSub String?                @unique
+  /**
+   * Se false, a conta ainda não tem senha escolhida pelo utilizador (ex.: primeiro login só Google).
+   * Nesse caso `POST /api/auth/change-password` aceita definir a primeira senha sem "senha atual".
+   */
+  senhaLocalConfigurada Boolean    @default(true)
   role      Role
   ativo     Boolean                @default(true)
   createdAt DateTime               @default(now())
@@ -34,8 +41,8 @@ model wp_Cotacao {
   urlLp               String
   objetivo            Objetivo
   budget              Decimal                @db.Decimal(18, 2)
-  dataInicio          DateTime
-  dataFim             DateTime
+  dataInicio          DateTime?
+  dataFim             DateTime?
   regiao              Regiao
   maturidadeDigital   MaturidadeDigital
   risco               ToleranciaRisco

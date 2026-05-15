@@ -188,14 +188,16 @@ export default function EditarCotacaoPage({
 
     return {
       budget: Number(cotacao.budget),
-      dataInicio:
-        typeof cotacao.dataInicio === 'string'
+      dataInicio: cotacao.dataInicio
+        ? typeof cotacao.dataInicio === 'string'
           ? cotacao.dataInicio.split('T')[0]
-          : dayjs(cotacao.dataInicio).format('YYYY-MM-DD'),
-      dataFim:
-        typeof cotacao.dataFim === 'string'
+          : dayjs(cotacao.dataInicio).format('YYYY-MM-DD')
+        : '',
+      dataFim: cotacao.dataFim
+        ? typeof cotacao.dataFim === 'string'
           ? cotacao.dataFim.split('T')[0]
-          : dayjs(cotacao.dataFim).format('YYYY-MM-DD'),
+          : dayjs(cotacao.dataFim).format('YYYY-MM-DD')
+        : '',
       tipoRegiao,
       estadosSelecionados,
       cidades,

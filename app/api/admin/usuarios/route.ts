@@ -5,6 +5,11 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth/password';
 import { obterUserIdDoRequest, usuarioTemRole } from '@/lib/utils/auth';
 import { mapDbRoleToUi, mapUiRoleToDb, type RoleUI } from '@/lib/utils/roles';
+import {
+  emailPossuiDominioPermitidoParaLogin,
+  MENSAGEM_EMAIL_DOMINIO_NEGADO,
+} from '@/lib/auth/emailDomainAllowlist';
+import { mensagemSenhaMinima, SENHA_MIN_CARACTERES } from '@/lib/auth/passwordPolicy';
 
 const schemaCriarUsuario = z.object({
   solicitanteId: z.preprocess(
@@ -25,7 +30,7 @@ const schemaCriarUsuario = z.object({
   ),
   senha: z.preprocess(
     (value) => (typeof value === 'string' ? value.trim() : value),
-    z.string().min(6, 'Senha mínima de 6 caracteres')
+    z.string().min(SENHA_MIN_CARACTERES, mensagemSenhaMinima())
   ),
   role: z.preprocess(
     (value) => (typeof value === 'string' ? value.toUpperCase().trim() : value),
@@ -168,12 +173,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!emailPossuiDominioPermitidoParaLogin(email)) {
+      return NextResponse.json({ success: false, error: MENSAGEM_EMAIL_DOMINIO_NEGADO }, { status: 403 });
+    }
+
     const senhaHash = await hashPassword(dados.senha);
     const novoUsuario = await prisma.wp_Usuario.create({
       data: {
         nome,
         email,
         senhaHash,
+        senhaLocalConfigurada: true,
         role: mapUiRoleToDb(dados.role),
         ativo: true,
       },

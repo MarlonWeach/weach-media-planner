@@ -7,8 +7,8 @@ export type CotacaoParaExportacaoPlano = {
   clienteSegmento: string;
   objetivo: string;
   budget: unknown;
-  dataInicio: Date;
-  dataFim: Date;
+  dataInicio: Date | null;
+  dataFim: Date | null;
   regiao: string;
   mixSugerido: unknown;
   precosSugeridos: unknown;

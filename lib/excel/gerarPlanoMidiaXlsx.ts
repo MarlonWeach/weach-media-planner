@@ -1,9 +1,12 @@
 import ExcelJS from 'exceljs';
-import fs from 'fs';
-import path from 'path';
 import type { DadosCotacao } from '@/lib/cotacao/planoMidiaTabelaComercial';
 import {
+  calcularTamanhoLogoPreservandoProporcao,
+  caminhoLogoWeach,
+} from '@/lib/branding/logoWeach';
+import {
   construirMatrizEstimativas,
+  diasCorridosPeriodo,
   faseCampanhaPorObjetivo,
   formatarData,
   formatarObjetivo,
@@ -14,11 +17,6 @@ import {
 } from '@/lib/cotacao/planoMidiaTabelaComercial';
 
 const MIDIA_FIXA = 'Weach Programmatic';
-
-/** Tamanho do logo no Excel (pol.), em px 96 DPI — mesmo referencial do ExcelJS `ext`. */
-const LOGO_EXCEL_LARGURA_POL = 3.1;
-const LOGO_EXCEL_ALTURA_POL = 2.33;
-const PX_POR_POL_96DPI = 96;
 
 /** Metadados da proposta no modelo da planilha legada (K3–K9, período etc.). */
 export interface MetadadosPropostaXlsx {
@@ -85,11 +83,6 @@ const LARGURAS_COLS_B_T = [
   28, 42.5,
 ];
 
-function diasCorridosPeriodo(inicio: Date, fim: Date): number {
-  const ms = fim.getTime() - inicio.getTime();
-  return Math.max(1, Math.ceil(ms / 86400000) + 1);
-}
-
 function textoSegmentacaoResumo(dados: DadosCotacao, regiaoTexto: string): string {
   const seg = formatarSegmento(dados.clienteSegmento);
   const reg = (regiaoTexto || dados.regiao || '').trim();
@@ -137,15 +130,28 @@ function aplicarEstiloU4(ws: ExcelJS.Worksheet, row: number) {
   c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 }
 
-function caminhoLogoWeach(): string | null {
-  const candidatos = [
-    path.join(process.cwd(), 'public', 'branding', 'weach-negative.png'),
-    path.join(process.cwd(), 'public', 'weach-negative.png'),
-  ];
-  for (const p of candidatos) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
+function inserirLogoPlanilha(workbook: ExcelJS.Workbook, ws: ExcelJS.Worksheet): void {
+  const logoPath = caminhoLogoWeach();
+  if (!logoPath) return;
+
+  const tamanhoLogo = calcularTamanhoLogoPreservandoProporcao(logoPath, {
+    maxWidthPx: 240,
+    maxHeightPx: 52,
+  });
+  if (!tamanhoLogo) return;
+
+  const imageId = workbook.addImage({
+    filename: logoPath,
+    extension: 'png',
+  });
+
+  const alturaLinhaPt = Math.max(ALTURA_LINHA_PADRAO, Math.ceil(tamanhoLogo.height * 0.75) + 4);
+  ws.getRow(2).height = alturaLinhaPt;
+
+  ws.addImage(imageId, {
+    tl: { col: 1.05, row: 0.2 },
+    ext: { width: tamanhoLogo.width, height: tamanhoLogo.height },
+  });
 }
 
 export async function gerarBufferPlanoMidiaXlsx(
@@ -165,7 +171,7 @@ export async function gerarBufferPlanoMidiaXlsx(
     ws.getColumn(i + 2).width = w;
   });
 
-  ws.getRow(2).height = ALTURA_LINHA_PADRAO;
+  inserirLogoPlanilha(workbook, ws);
 
   preencherRangeAzulBranco(ws, 3, 9, 2, 10);
 
@@ -190,7 +196,8 @@ export async function gerarBufferPlanoMidiaXlsx(
   ws.getCell('R4').fill = FILL_CABECALHO;
   ws.getCell('R4').alignment = { horizontal: 'center', vertical: 'middle' };
   ws.mergeCells('U4:V4');
-  ws.getCell('U4').value = `${diasCorridosPeriodo(dados.dataInicio, dados.dataFim)} dias corridos`;
+  const dias = diasCorridosPeriodo(dados.dataInicio, dados.dataFim);
+  ws.getCell('U4').value = dias != null ? `${dias} dias corridos` : '—';
   ws.getCell('U4').font = { name: 'Calibri', size: 10 };
   ws.getCell('U4').fill = FILL_RESUMO_FUNDO;
   ws.getCell('U4').alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
@@ -383,21 +390,6 @@ export async function gerarBufferPlanoMidiaXlsx(
   cObs.alignment = { vertical: 'top', wrapText: true, horizontal: 'left' };
   ws.getRow(rFoot).height = 120;
   rFoot += 1;
-
-  const logoPath = caminhoLogoWeach();
-  if (logoPath) {
-    const imageId = workbook.addImage({
-      filename: logoPath,
-      extension: 'png',
-    });
-    ws.addImage(imageId, {
-      tl: { col: 1, row: 1 },
-      ext: {
-        width: LOGO_EXCEL_LARGURA_POL * PX_POR_POL_96DPI,
-        height: LOGO_EXCEL_ALTURA_POL * PX_POR_POL_96DPI,
-      },
-    });
-  }
 
   const buf = await workbook.xlsx.writeBuffer();
   return Buffer.from(buf);
