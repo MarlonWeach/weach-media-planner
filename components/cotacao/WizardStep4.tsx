@@ -196,6 +196,11 @@ export function WizardStep4({
   const [error, setError] = useState<string | null>(null);
   const [itemsPlano, setItemsPlano] = useState<ItemPlanoMidia[]>([]);
   const [cotacaoId, setCotacaoId] = useState<string | null>(null);
+  const [distribuicaoFormatosMeta, setDistribuicaoFormatosMeta] = useState<{
+    origem?: string;
+    racional?: string;
+    formatos?: Array<{ canal: string; formato: string; modeloCompra: string; percentual: number }>;
+  } | null>(null);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [baixandoExcel, setBaixandoExcel] = useState(false);
   const [erroAjuste, setErroAjuste] = useState<string | null>(null);
@@ -420,6 +425,9 @@ export function WizardStep4({
 
       const data = await response.json();
       setCotacaoId(data.cotacao.id);
+      if (data.cotacao.distribuicaoFormatos) {
+        setDistribuicaoFormatosMeta(data.cotacao.distribuicaoFormatos);
+      }
 
       // Transforma mix e preços em items do plano
       const items = transformarEmItemsPlano(
@@ -1049,6 +1057,7 @@ export function WizardStep4({
         cpcEstimado,
         cplEstimado,
       },
+      ...(distribuicaoFormatosMeta ? { distribuicaoFormatos: distribuicaoFormatosMeta } : {}),
     };
   };
 

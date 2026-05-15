@@ -201,20 +201,37 @@ export async function gerarBufferPlanoMidiaXlsx(
   titResumo.fill = FILL_CABECALHO;
   titResumo.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  ws.mergeCells('M4:O4');
-  ws.getCell('M4').value = 'PERÍODO';
-  ws.getCell('M4').font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-  ws.getCell('M4').fill = FILL_CABECALHO;
-  ws.getCell('M4').alignment = { horizontal: 'center', vertical: 'middle' };
+  const estiloCelulaCabecalhoResumo = {
+    font: { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } },
+    fill: FILL_CABECALHO,
+    alignment: { horizontal: 'center' as const, vertical: 'middle' as const },
+  };
+  for (const col of ['M4', 'N4', 'O4']) {
+    const cell = ws.getCell(col);
+    Object.assign(cell, estiloCelulaCabecalhoResumo);
+  }
+  ws.getCell('N4').value = 'ID da cotação';
   ws.mergeCells('P4:Q4');
-  const dias = diasCorridosPeriodo(dados.dataInicio, dados.dataFim);
-  ws.getCell('P4').value = dias != null ? `${dias} dias corridos` : '—';
-  ws.getCell('P4').font = { name: 'Calibri', size: 10 };
-  ws.getCell('P4').fill = FILL_RESUMO_FUNDO;
-  ws.getCell('P4').alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  const cIdValor = ws.getCell('P4');
+  cIdValor.value = dados.id;
+  cIdValor.font = { name: 'Calibri', size: 10, bold: true };
+  cIdValor.fill = FILL_RESUMO_FUNDO;
+  cIdValor.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  preencherRangeAzulBranco(ws, 5, 8, 13, 15);
-  for (let rr = 5; rr <= 8; rr += 1) {
+  ws.mergeCells('M5:O5');
+  ws.getCell('M5').value = 'PERÍODO';
+  ws.getCell('M5').font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  ws.getCell('M5').fill = FILL_CABECALHO;
+  ws.getCell('M5').alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.mergeCells('P5:Q5');
+  const dias = diasCorridosPeriodo(dados.dataInicio, dados.dataFim);
+  ws.getCell('P5').value = dias != null ? `${dias} dias corridos` : '—';
+  ws.getCell('P5').font = { name: 'Calibri', size: 10 };
+  ws.getCell('P5').fill = FILL_RESUMO_FUNDO;
+  ws.getCell('P5').alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+
+  preencherRangeAzulBranco(ws, 6, 8, 13, 15);
+  for (let rr = 6; rr <= 8; rr += 1) {
     aplicarEstiloValorResumoLateral(ws, rr);
   }
 

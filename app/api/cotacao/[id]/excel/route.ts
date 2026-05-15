@@ -13,6 +13,7 @@ import {
   montarRegiaoExibicao,
 } from '@/lib/cotacao/regiaoExibicaoCotacao';
 import { gerarBufferPlanoMidiaXlsx } from '@/lib/excel/gerarPlanoMidiaXlsx';
+import { isIdCotacaoValido } from '@/lib/cotacao/idCotacao';
 import { montarNomeArquivoPlanoMidiaXlsx } from '@/lib/cotacao/nomeArquivoPlanoMidia';
 
 export const dynamic = 'force-dynamic';
@@ -28,8 +29,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 });
     }
 
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(cotacaoId)) {
+    if (!isIdCotacaoValido(cotacaoId)) {
       return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
     }
 

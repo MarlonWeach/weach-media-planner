@@ -23,6 +23,7 @@ import { gerarBufferPlanoMidiaXlsx } from '@/lib/excel/gerarPlanoMidiaXlsx';
 import { montarNomeArquivoPlanoMidiaXlsx } from '@/lib/cotacao/nomeArquivoPlanoMidia';
 import { gerarBriefingPDF } from '@/lib/pdf/geradorBriefingPDF';
 import { montarLinhasBriefingObservacoes } from '@/lib/cotacao/briefingLinhas';
+import { isIdCotacaoValido } from '@/lib/cotacao/idCotacao';
 import {
   resolveCotacaoEmailRecipients,
   resolveCotacaoInternalRecipients,
@@ -64,8 +65,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 });
     }
 
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(cotacaoId)) {
+    if (!isIdCotacaoValido(cotacaoId)) {
       return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
     }
 

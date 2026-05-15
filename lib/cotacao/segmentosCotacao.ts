@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Segmentos de cliente no wizard e na API de cotação.
  * Manter alinhado ao enum `Segmento` em `prisma/schema.prisma`.
  */
-export const SEGMENTOS_WIZARD = [
+const SEGMENTOS_WIZARD_BASE = [
   { value: 'AUTOMOTIVO', label: 'Automotivo' },
   { value: 'FINANCEIRO', label: 'Financeiro' },
   { value: 'VAREJO', label: 'Varejo' },
@@ -23,9 +23,14 @@ export const SEGMENTOS_WIZARD = [
   { value: 'OUTROS', label: 'Outros' },
 ] as const;
 
-export type SegmentoCotacaoValue = (typeof SEGMENTOS_WIZARD)[number]['value'];
+/** Opções do dropdown, ordenadas alfabeticamente pelo rótulo (pt-BR). */
+export const SEGMENTOS_WIZARD = [...SEGMENTOS_WIZARD_BASE].sort((a, b) =>
+  a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' })
+);
 
-const valoresSegmento = SEGMENTOS_WIZARD.map((item) => item.value) as unknown as [
+export type SegmentoCotacaoValue = (typeof SEGMENTOS_WIZARD_BASE)[number]['value'];
+
+const valoresSegmento = SEGMENTOS_WIZARD_BASE.map((item) => item.value) as unknown as [
   SegmentoCotacaoValue,
   SegmentoCotacaoValue,
   ...SegmentoCotacaoValue[],

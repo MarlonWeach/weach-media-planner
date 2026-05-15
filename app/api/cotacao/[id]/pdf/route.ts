@@ -17,6 +17,7 @@ import {
   sendPerformanceQueueNotificationEmail,
   sendCotacaoOperationalEmail,
 } from '@/lib/notifications/cotacaoEmail';
+import { isIdCotacaoValido } from '@/lib/cotacao/idCotacao';
 import { syncCotacaoToGoogleSheets } from '@/lib/integrations/googleSheetsCotacao';
 import {
   extrairPayloadObservacoes,
@@ -132,8 +133,7 @@ export async function POST(
     }
 
     // Validação básica do ID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(cotacaoId)) {
+    if (!isIdCotacaoValido(cotacaoId)) {
       return NextResponse.json(
         { success: false, error: 'ID de cotação inválido' },
         { status: 400 }
@@ -391,7 +391,6 @@ export async function POST(
       try {
         await syncCotacaoToGoogleSheets({
           id: cotacao.id,
-          numeroSequencial: cotacao.numeroSequencial,
           createdAt: cotacao.createdAt,
           dataInicio: cotacao.dataInicio,
           dataFim: cotacao.dataFim,

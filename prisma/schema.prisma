@@ -32,8 +32,8 @@ model wp_Usuario {
 }
 
 model wp_Cotacao {
-  id                  String                 @id @default(uuid())
-  numeroSequencial    Int?                   @unique
+  /** ID único no formato ano-sequência (ex.: `2026-1`). */
+  id                  String                 @id
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
   clienteNome         String
@@ -71,7 +71,6 @@ model wp_Cotacao {
   @@index([objetivo])
   @@index([status])
   @@index([createdAt])
-  @@index([numeroSequencial])
   @@index([vendedorId])
   @@index([solicitanteId])
   @@index([agenciaId])

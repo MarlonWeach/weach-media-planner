@@ -5,18 +5,31 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, podeAcessarCotacao } from '@/lib/utils/auth';
 import { sincronizarHistoricoComMixStep4 } from '@/lib/performance/historico';
-import { obterProximoNumeroSequencialCotacao } from '@/lib/cotacao/sequencial';
+import { isIdCotacaoValido } from '@/lib/cotacao/idCotacao';
+import { obterProximoIdCotacao } from '@/lib/cotacao/sequencial';
 import { mergeObservacoesComStep1 } from '@/lib/cotacao/observacoesMerge';
 
+const schemaStep4 = z.object({
+  mix: z.any(),
+  precos: z.any().optional(),
+  estimativas: z.any().optional(),
+  distribuicaoFormatos: z.any().optional(),
+});
+
 const schemaRascunho = z.object({
-  cotacaoId: z.string().uuid().optional(),
+  cotacaoId: z
+    .string()
+    .min(1)
+    .refine((value) => isIdCotacaoValido(value), { message: 'ID de cotação inválido' })
+    .optional(),
   step1: z.any().optional(),
   step2: z.any().optional(),
   step3: z.any().optional(),
-  step4: z.any().optional(),
+  step4: schemaStep4.optional(),
   /** JSON completo do briefing (passos 1–3); usado com step4 para não perder link de anexo etc. */
   observacoesCompletas: z.string().optional(),
   vendedorId: z.string().uuid().optional(),
@@ -24,6 +37,27 @@ const schemaRascunho = z.object({
 
 const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Preserva metadados do motor (ex.: `distribuicaoFormatos.origem`) ao sincronizar o step 4. */
+function mesclarMixSugeridoStep4(
+  mixAnterior: unknown,
+  step4: z.infer<typeof schemaStep4>
+): Prisma.InputJsonValue {
+  const base: Record<string, unknown> =
+    mixAnterior && typeof mixAnterior === 'object' && !Array.isArray(mixAnterior)
+      ? { ...(mixAnterior as Record<string, unknown>) }
+      : Array.isArray(mixAnterior)
+        ? { mix: mixAnterior }
+        : {};
+
+  return {
+    ...base,
+    mix: step4.mix,
+    precos: step4.precos ?? base.precos ?? {},
+    estimativas: step4.estimativas ?? base.estimativas ?? {},
+    distribuicaoFormatos: step4.distribuicaoFormatos ?? base.distribuicaoFormatos,
+  } as Prisma.InputJsonValue;
+}
 
 function possuiDefinicaoCampanhaHibrida(step2: any): boolean {
   const definicao = Array.isArray(step2?.definicaoCampanha) ? step2.definicaoCampanha : [];
@@ -166,7 +200,10 @@ export async function POST(request: NextRequest) {
       }
 
       if (dados.step4) {
-        dadosAtualizacao.mixSugerido = dados.step4.mix;
+        dadosAtualizacao.mixSugerido = mesclarMixSugeridoStep4(
+          cotacao.mixSugerido,
+          dados.step4
+        );
         dadosAtualizacao.precosSugeridos = dados.step4.precos;
         dadosAtualizacao.estimativas = dados.step4.estimativas;
         if (Array.isArray(dados.step4.mix)) {
@@ -216,10 +253,10 @@ export async function POST(request: NextRequest) {
 
       const relacionamentos = await normalizarRelacionamentosStep1(dados.step1);
 
-      const numeroSequencial = await obterProximoNumeroSequencialCotacao();
+      const novoId = await obterProximoIdCotacao();
       const novaCotacao = await prisma.wp_Cotacao.create({
         data: {
-          numeroSequencial,
+          id: novoId,
           clienteNome: dados.step1.clienteNome || 'Rascunho',
           clienteSegmento: dados.step1.clienteSegmento || 'OUTROS',
           urlLp: dados.step1.urlLp || 'https://exemplo.com',
@@ -256,7 +293,6 @@ export async function POST(request: NextRequest) {
         success: true,
         cotacao: {
           id: novaCotacao.id,
-          numeroSequencial: novaCotacao.numeroSequencial,
           status: novaCotacao.status,
         },
       });

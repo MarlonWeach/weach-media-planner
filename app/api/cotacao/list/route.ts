@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
+import { isIdCotacaoOperacional } from '@/lib/cotacao/idCotacao';
 import { listarEscopoTagsCotacao } from '@/lib/cotacao/tagsEscopoDashboard';
 
 export const dynamic = 'force-dynamic';
@@ -76,10 +77,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (busca) {
-      where.clienteNome = {
-        contains: busca,
-        mode: 'insensitive',
-      };
+      const buscaNormalizada = busca.trim();
+      if (isIdCotacaoOperacional(buscaNormalizada)) {
+        where.id = buscaNormalizada;
+      } else {
+        where.clienteNome = {
+          contains: buscaNormalizada,
+          mode: 'insensitive',
+        };
+      }
     }
 
     if (solicitanteId) {

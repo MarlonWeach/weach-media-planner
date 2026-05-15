@@ -1,9 +1,9 @@
 import { google } from 'googleapis';
+import { idCotacaoParaColunaSheets } from '@/lib/cotacao/idCotacao';
 import { prisma } from '@/lib/prisma';
 
 interface SyncCotacaoInput {
   id: string;
-  numeroSequencial?: number | null;
   createdAt?: Date;
   dataInicio?: Date | null;
   dataFim?: Date | null;
@@ -138,7 +138,7 @@ function buildLegacyRow(input: SyncCotacaoInput): string[] {
   row[28] = ''; // AC descontinuado (unificado em N)
   row[29] = ''; // AD descontinuado (unificado em T)
   row[30] = ''; // AE descontinuado (unificado em Z)
-  row[36] = input.numeroSequencial ? String(input.numeroSequencial) : ''; // AK
+  row[36] = idCotacaoParaColunaSheets(input.id); // AK
 
   return row;
 }
@@ -149,7 +149,7 @@ export async function syncCotacaoToGoogleSheets(input: SyncCotacaoInput): Promis
   const serviceAccountEmail = getEnv('GOOGLE_SERVICE_ACCOUNT_EMAIL');
   const serviceAccountPrivateKey = normalizePrivateKey(getEnv('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY'));
   const spreadsheetId = getEnv('GOOGLE_SHEETS_ID');
-  const tabName = getEnv('GOOGLE_SHEETS_TAB_NAME') || 'Cotacoes';
+  const tabName = getEnv('GOOGLE_SHEETS_TAB_NAME') || 'Form Responses 1';
 
   if (!serviceAccountEmail || !serviceAccountPrivateKey || !spreadsheetId) {
     throw new Error(
@@ -166,7 +166,7 @@ export async function syncCotacaoToGoogleSheets(input: SyncCotacaoInput): Promis
   const sheets = google.sheets({ version: 'v4', auth });
   const row = buildLegacyRow(input);
   const cotacaoId = input.id;
-  const numeroSequencialLabel = input.numeroSequencial ? String(input.numeroSequencial) : '';
+  const idCotacaoLabel = idCotacaoParaColunaSheets(input.id) || input.id;
 
   const logExistente = await prisma.wp_IntegracaoSheetsLog.findUnique({
     where: { cotacaoId },
@@ -195,9 +195,17 @@ export async function syncCotacaoToGoogleSheets(input: SyncCotacaoInput): Promis
   let ultimoErro = '';
   for (let tentativa = 1; tentativa <= MAX_RETRY_ATTEMPTS; tentativa += 1) {
     try {
-      await sheets.spreadsheets.values.append({
+      // `append` pode alinhar a partir da coluna errada (ex.: AJ) se a planilha tiver largura irregular.
+      // Gravação explícita em A:AK garante o ID na coluna AK do layout do Form.
+      const existentes = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: `${tabName}!A:AK`,
+      });
+      const proximaLinha = (existentes.data.values?.length ?? 0) + 1;
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${tabName}!A${proximaLinha}:AK${proximaLinha}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [row],
@@ -211,7 +219,7 @@ export async function syncCotacaoToGoogleSheets(input: SyncCotacaoInput): Promis
           ultimoErro: null,
           ultimoSyncAt: new Date(),
           linhasEnviadas: 1,
-          ultimaReferencia: numeroSequencialLabel,
+          ultimaReferencia: idCotacaoLabel,
         },
       });
       return;
@@ -225,12 +233,12 @@ export async function syncCotacaoToGoogleSheets(input: SyncCotacaoInput): Promis
     data: {
       status: 'ERRO',
       ultimoErro,
-      ultimaReferencia: numeroSequencialLabel,
+      ultimaReferencia: idCotacaoLabel,
     },
   });
 
   throw new Error(
-    `Falha ao sincronizar cotação ${numeroSequencialLabel || cotacaoId} no Google Sheets após ${MAX_RETRY_ATTEMPTS} tentativas: ${ultimoErro}`
+    `Falha ao sincronizar cotação ${idCotacaoLabel} no Google Sheets após ${MAX_RETRY_ATTEMPTS} tentativas: ${ultimoErro}`
   );
 }
 

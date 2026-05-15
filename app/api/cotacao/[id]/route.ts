@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { isIdCotacaoValido } from '@/lib/cotacao/idCotacao';
 import { obterUserIdDoRequest, podeAcessarCotacao, usuarioTemRole } from '@/lib/utils/auth';
 
 export async function GET(
@@ -15,9 +16,7 @@ export async function GET(
   try {
     const cotacaoId = params.id;
 
-    // Validação básica do ID (UUID)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(cotacaoId)) {
+    if (!isIdCotacaoValido(cotacaoId)) {
       return NextResponse.json(
         { success: false, error: 'ID de cotação inválido' },
         { status: 400 }
@@ -149,8 +148,7 @@ export async function DELETE(
 ) {
   try {
     const cotacaoId = params.id;
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(cotacaoId)) {
+    if (!isIdCotacaoValido(cotacaoId)) {
       return NextResponse.json(
         { success: false, error: 'ID de cotação inválido' },
         { status: 400 }

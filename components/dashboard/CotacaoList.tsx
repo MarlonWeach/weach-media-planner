@@ -11,6 +11,7 @@ import Link from 'next/link';
 import dayjs from 'dayjs';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import type { EscopoTagId } from '@/lib/cotacao/tagsEscopoDashboard';
+import { SEGMENTOS_WIZARD } from '@/lib/cotacao/segmentosCotacao';
 import { LABEL_ESCOPO_TAG } from '@/lib/cotacao/tagsEscopoDashboard';
 
 interface Cotacao {
@@ -127,22 +128,7 @@ export function CotacaoList({ userId }: CotacaoListProps) {
 
   const segmentos = [
     { value: '', label: 'Todos os segmentos' },
-    { value: 'AUTOMOTIVO', label: 'Automotivo' },
-    { value: 'FINANCEIRO', label: 'Financeiro' },
-    { value: 'VAREJO', label: 'Varejo' },
-    { value: 'IMOBILIARIO', label: 'Imobiliário' },
-    { value: 'SAUDE', label: 'Saúde' },
-    { value: 'EDUCACAO', label: 'Educação' },
-    { value: 'TELECOM', label: 'Telecom' },
-    { value: 'SERVICOS', label: 'Serviços' },
-    { value: 'CPG_BENS_CONSUMO', label: 'CPG / Bens de consumo' },
-    { value: 'PROMOCAO', label: 'Promoção' },
-    { value: 'SAAS', label: 'SaaS' },
-    { value: 'B2B', label: 'B2B' },
-    { value: 'AGRO', label: 'Agro' },
-    { value: 'TURISMO', label: 'Turismo' },
-    { value: 'BELEZA_SAUDE', label: 'Beleza e saúde' },
-    { value: 'OUTROS', label: 'Outros' },
+    ...SEGMENTOS_WIZARD.map((seg) => ({ value: seg.value, label: seg.label })),
   ];
 
   const formatarStatus = (status: string) =>
@@ -340,9 +326,7 @@ export function CotacaoList({ userId }: CotacaoListProps) {
             <table className="min-w-[960px] w-full divide-y divide-gray-200 text-left text-sm">
               <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-3" title="Identificador único da cotação (UUID)">
-                    ID
-                  </th>
+                  <th className="whitespace-nowrap px-4 py-3">ID</th>
                   <th className="whitespace-nowrap px-4 py-3">Campanha</th>
                   <th className="whitespace-nowrap px-4 py-3">Escopo</th>
                   <th className="whitespace-nowrap px-4 py-3">Segmento</th>
@@ -359,7 +343,7 @@ export function CotacaoList({ userId }: CotacaoListProps) {
                   const podeEditar = cotacao.status === 'RASCUNHO';
                   return (
                     <tr key={cotacao.id} className="hover:bg-gray-50/80">
-                      <td className="max-w-[min(100vw,22rem)] px-4 py-3 font-mono text-xs leading-snug text-gray-800 break-all">
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-sm font-medium text-gray-900">
                         <span className="select-all">{cotacao.id}</span>
                       </td>
                       <td className="max-w-[220px] px-4 py-3">

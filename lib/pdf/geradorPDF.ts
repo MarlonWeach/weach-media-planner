@@ -111,7 +111,13 @@ function adicionarCabecalho(doc: PDFKitDocument, dados: DadosCotacao) {
       align: 'center',
     });
 
-  doc.y = linhaY + 88;
+  doc
+    .fontSize(11)
+    .fillColor(CORES.GRAY)
+    .font('Helvetica-Bold')
+    .text(`ID da cotação: ${dados.id}`, margemEsquerda, linhaY + 80, { align: 'center' });
+
+  doc.y = linhaY + 100;
   doc.moveDown(0.4);
 }
 

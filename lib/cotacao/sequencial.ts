@@ -1,16 +1,28 @@
 import { prisma } from '@/lib/prisma';
-
-const CHAVE_CONFIGURACAO = 'COTACAO_SEQUENCIAL_CONTADOR';
+const CHAVE_CONFIGURACAO = 'COTACAO_SEQUENCIAL_POR_ANO';
 const ADVISORY_LOCK_ID = 9000001;
 
-interface SequencialPayload {
+interface ContadorAnual {
   current: number;
   seedApplied: number;
+}
+
+interface SequencialPorAnoPayload {
+  byYear: Record<string, ContadorAnual>;
   updatedAt: string;
 }
 
-function parseSeedInicialLegado(): number {
-  const raw = process.env.COTACAO_SEQUENCIAL_SEED;
+export function obterAnoSequencialPadrao(data = new Date()): number {
+  return data.getFullYear();
+}
+
+function chaveAno(ano: number): string {
+  return String(ano);
+}
+
+function parseSeedInicialAno(ano: number): number {
+  const envKey = `COTACAO_SEQUENCIAL_SEED_${ano}`;
+  const raw = process.env[envKey] ?? process.env.COTACAO_SEQUENCIAL_SEED;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) {
     return 0;
@@ -18,35 +30,53 @@ function parseSeedInicialLegado(): number {
   return Math.floor(parsed);
 }
 
-function parseValorConfiguracao(valor: unknown, fallbackSeed: number): SequencialPayload {
+function parsePayloadPorAno(valor: unknown): SequencialPorAnoPayload {
   if (valor && typeof valor === 'object' && !Array.isArray(valor)) {
-    const payload = valor as Partial<SequencialPayload>;
-    const current = Number(payload.current);
-    const seedApplied = Number(payload.seedApplied);
-    if (Number.isFinite(current) && current >= 0) {
-      return {
-        current: Math.floor(current),
-        seedApplied: Number.isFinite(seedApplied) && seedApplied >= 0 ? Math.floor(seedApplied) : fallbackSeed,
-        updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : new Date().toISOString(),
-      };
+    const raw = valor as Partial<SequencialPorAnoPayload>;
+    const byYear: Record<string, ContadorAnual> = {};
+    if (raw.byYear && typeof raw.byYear === 'object') {
+      for (const [year, entry] of Object.entries(raw.byYear)) {
+        const current = Number((entry as ContadorAnual)?.current);
+        const seedApplied = Number((entry as ContadorAnual)?.seedApplied);
+        if (Number.isFinite(current) && current >= 0) {
+          byYear[year] = {
+            current: Math.floor(current),
+            seedApplied:
+              Number.isFinite(seedApplied) && seedApplied >= 0
+                ? Math.floor(seedApplied)
+                : 0,
+          };
+        }
+      }
     }
+    return {
+      byYear,
+      updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString(),
+    };
   }
 
-  return {
-    current: fallbackSeed,
-    seedApplied: fallbackSeed,
-    updatedAt: new Date().toISOString(),
-  };
+  return { byYear: {}, updatedAt: new Date().toISOString() };
+}
+
+function obterContadorAno(
+  payload: SequencialPorAnoPayload,
+  ano: number
+): ContadorAnual {
+  const key = chaveAno(ano);
+  const existente = payload.byYear[key];
+  if (existente) return existente;
+  const seed = parseSeedInicialAno(ano);
+  return { current: seed, seedApplied: seed };
 }
 
 /**
- * Task 9-2: Gera próximo número sequencial operacional de cotação.
- * Usa lock transacional no Postgres para evitar colisão em concorrência.
+ * Gera o próximo ID de cotação (ex.: `2026-1`, `2026-2`).
+ * Esse valor é a chave primária (`wp_Cotacao.id`).
  */
-export async function obterProximoNumeroSequencialCotacao(): Promise<number> {
-  const seedInicialLegado = parseSeedInicialLegado();
+export async function obterProximoIdCotacao(anoReferencia?: number): Promise<string> {
+  const ano = anoReferencia ?? obterAnoSequencialPadrao();
 
-  return prisma.$transaction(async (tx) => {
+  const { numeroSequencial } = await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${ADVISORY_LOCK_ID})`);
 
     let config = await tx.wp_Configuracao.findUnique({
@@ -55,13 +85,13 @@ export async function obterProximoNumeroSequencialCotacao(): Promise<number> {
     });
 
     if (!config) {
+      const seed = parseSeedInicialAno(ano);
       config = await tx.wp_Configuracao.create({
         data: {
           chave: CHAVE_CONFIGURACAO,
-          descricao: 'Contador sequencial operacional das cotações (PBI-9)',
+          descricao: 'Contador sequencial por ano das cotações (PBI-9)',
           valor: {
-            current: seedInicialLegado,
-            seedApplied: seedInicialLegado,
+            byYear: { [chaveAno(ano)]: { current: seed, seedApplied: seed } },
             updatedAt: new Date().toISOString(),
           },
           ativo: true,
@@ -70,21 +100,28 @@ export async function obterProximoNumeroSequencialCotacao(): Promise<number> {
       });
     }
 
-    const payloadAtual = parseValorConfiguracao(config.valor, seedInicialLegado);
-    const proximoNumero = payloadAtual.current + 1;
+    const payload = parsePayloadPorAno(config.valor);
+    const contadorAno = obterContadorAno(payload, ano);
+    const proximaSequencia = contadorAno.current + 1;
 
     await tx.wp_Configuracao.update({
       where: { id: config.id },
       data: {
         valor: {
-          ...payloadAtual,
-          current: proximoNumero,
+          byYear: {
+            ...payload.byYear,
+            [chaveAno(ano)]: {
+              current: proximaSequencia,
+              seedApplied: contadorAno.seedApplied,
+            },
+          },
           updatedAt: new Date().toISOString(),
         },
       },
     });
 
-    return proximoNumero;
+    return { numeroSequencial: proximaSequencia };
   });
-}
 
+  return `${ano}-${numeroSequencial}`;
+}

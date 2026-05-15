@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { obterUserIdDoRequest, usuarioTemRole } from '@/lib/utils/auth';
+import { isIdCotacaoValido } from '@/lib/cotacao/idCotacao';
 import {
   atualizarObservacoesComHistoricoPerformance,
   ehCanalMixPerformanceFila,
@@ -11,7 +12,10 @@ import {
 } from '@/lib/performance/historico';
 
 const schemaRegistro = z.object({
-  cotacaoId: z.string().uuid(),
+  cotacaoId: z
+    .string()
+    .min(1)
+    .refine((value) => isIdCotacaoValido(value), { message: 'ID de cotação inválido' }),
   canal: z.string().min(1),
   formato: z.string().min(1),
   modeloCompra: z.string().min(1),
