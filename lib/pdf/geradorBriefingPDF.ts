@@ -1,6 +1,9 @@
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
-import type { BriefingLinha } from '@/lib/cotacao/briefingLinhas';
+import {
+  mesclarLinhasBriefingSemDuplicar,
+  type BriefingLinha,
+} from '@/lib/cotacao/briefingLinhas';
 import {
   alturaFaixaCabecalhoMarinhoPt,
   desenharFaixaCabecalhoMarinho,
@@ -100,12 +103,16 @@ export async function gerarBriefingPDF(
 
       const linhasCompletas: Array<[string, string]> =
         dados.linhasEspelho && dados.linhasEspelho.length > 0
-          ? [
-              ['ID da Cotação', safe(dados.cotacaoId)],
-              ['Budget (valor na cotação)', formatarMoeda(dados.budget)],
-              ['Região (valor na cotação)', safe(dados.regiao)],
-              ...dados.linhasEspelho.map((l) => [l.label, l.value] as [string, string]),
-            ]
+          ? mesclarLinhasBriefingSemDuplicar(
+              [
+                { label: 'ID da Cotação', value: safe(dados.cotacaoId) },
+                {
+                  label: 'Budget (valor na cotação)',
+                  value: formatarMoeda(dados.budget),
+                },
+              ],
+              dados.linhasEspelho
+            ).map((l) => [l.label, l.value] as [string, string])
           : [
               ['ID da Cotação', safe(dados.cotacaoId)],
               ['Nome do Anunciante / Campanha', safe(dados.clienteNome)],

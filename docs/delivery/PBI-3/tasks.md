@@ -1,26 +1,30 @@
 # Tasks - PBI-3: Relatórios e Dashboard
 
 ## Status Geral
-📌 Pendente
+🔄 InProgress (MVP comercial entregue; PDF agregado pendente)
 
 ## Tasks
 
 | ID | Descrição | Status | Prioridade |
 |----|-----------|--------|------------|
-| 3-1 | Criar API de relatórios | 📌 Pendente | 🚨 Crítica |
-| 3-2 | Implementar relatório de cotações por período | 📌 Pendente | ⚠️ Alta |
-| 3-3 | Implementar relatório de segmentos | 📌 Pendente | ⚠️ Alta |
-| 3-4 | Implementar relatório de mix médio | 📌 Pendente | ⚠️ Alta |
-| 3-5 | Implementar relatório de desvios de preço | 📌 Pendente | ⚠️ Alta |
-| 3-6 | Criar visualizações com gráficos | 📌 Pendente | 📌 Média |
-| 3-7 | Implementar exportação CSV | 📌 Pendente | 📌 Média |
-| 3-8 | Implementar exportação PDF de relatórios | 📌 Pendente | 📎 Baixa |
-| 3-9 | Exportar plano de mídia da cotação em Excel (espelho do PDF comercial) + anexo no e-mail | ✅ Done | 📌 Média |
+| 3-1 | Serviço + rota interna `GET /api/relatorios` (base com filtros) | ✅ Done | 🚨 Crítica |
+| 3-2 | Relatório de cotações por período | ✅ Done | ⚠️ Alta |
+| 3-3 | Relatório de segmentos | ✅ Done | ⚠️ Alta |
+| 3-4 | Relatório de mix médio por canal | ✅ Done | ⚠️ Alta |
+| 3-5 | Relatório de desvios de preço (performance) | ✅ Done | ⚠️ Alta |
+| 3-6 | Página `/relatorios` com visualizações | ✅ Done | 📌 Média |
+| 3-7 | Exportação CSV | ✅ Done | 📌 Média |
+| 3-8 | Exportação PDF de relatórios agregados | 📌 Pendente | 📎 Baixa |
+| 3-9 | Exportar plano de mídia da cotação em Excel + anexo no e-mail | ✅ Done | 📌 Média |
 
 ## Ordem de Execução Recomendada
 
-1. **3-1** - API base de relatórios
-2. **3-2, 3-3, 3-4, 3-5** - Relatórios principais (paralelos)
-3. **3-6** - Visualizações
-4. **3-7, 3-8, 3-9** - Exportações (CSV, PDF de relatórios, Excel do plano na cotação)
+1. ~~**3-1**~~ — API e `lib/relatorios`
+2. ~~**3-2 … 3-7, 3-6**~~ — entregues no mesmo pacote `/relatorios`
+3. **3-8** — PDF opcional (impressão ou gerador)
+4. PBI futuro — HubSpot CRM
 
+## Observações
+
+- Acesso: header **Relatórios** + card no Admin.
+- Managers (`EXTERNO`) têm a mesma visão global que admin nos relatórios.

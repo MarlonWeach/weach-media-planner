@@ -1,7 +1,7 @@
 # Tasks - PBI-9: Convivência Google Form + ID Sequencial + Sync de Respostas
 
 ## Status Geral
-🔄 InProgress
+✅ Done
 
 ## Tasks
 
@@ -19,7 +19,7 @@
 | 9-10 | Dashboard: exibir tag por cotação (Programática, Performance ou Mensageria) conforme definição da campanha | ✅ Done | 📌 Média |
 | 9-11 | Dashboard: validar visibilidade — usuário com papel **manager** deve listar todas as cotações; corrigir API/query se houver filtro indevido | ✅ Done | ⚠️ Alta |
 | 9-12 | Header global: fundo `#1f2b51`, logo Weach (negativa/branca) e ações **Home**, **Admin** (e demais links já existentes) em todas as páginas | ✅ Done | 📌 Média |
-| 9-13 | Flag e auditoria: distribuição de budget por formato — origem IA vs fallback + racional exposto | 📌 Proposed | 📌 Média |
+| 9-13 | Flag e auditoria: distribuição de budget por formato — origem IA vs fallback + racional exposto | ✅ Done | 📌 Média |
 
 ## Ordem Recomendada
 1. `9-1` padrão de ID e exemplos
@@ -42,3 +42,4 @@
 - **Progresso recente (9-8):** enum `Segmento` no Prisma + lista única `lib/cotacao/segmentosCotacao.ts` (wizard + `POST /api/cotacao/criar`); após alterar o schema, rodar `npx prisma generate` e `npx prisma db push` (ou migration) no ambiente.
 - **Dashboard (9-9 a 9-11):** reutilizar a mesma fonte de verdade da definição de campanha que o wizard/e-mail (`resolverApenasPerformance` / observações) para tags e, no 9-11, alinhar regra de listagem com `podeAcessarCotacao` ou política explícita para `Role.MANAGER` (ou equivalente no projeto).
 - **Header (9-12):** cor de fundo `#1f2b51`; logo em versão clara (ex. `public/branding/weach-negative.png` ou asset equivalente com fundo transparente); botões/links condicionados a papel (ex. Admin só para quem tiver permissão).
+- **9-13 (concluída):** auditoria no step 4, matriz formato×objetivo, labels em e-mail/PDF, fixes de pricing CTV e UX dashboard; testes do motor validados; doc operacional [`guia-auditoria-motor-mix.md`](./guia-auditoria-motor-mix.md). Follow-up opcional: histórico IA da distribuição em `wp_HistoricoIA`.

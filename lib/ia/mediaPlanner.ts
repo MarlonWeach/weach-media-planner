@@ -6,6 +6,11 @@
  */
 
 import OpenAI from 'openai';
+import {
+  aplicarLimitesEstrategicosFormatos,
+  montarTabelaPesosFormatoPrompt,
+  pesoFormatoParaObjetivo,
+} from '@/lib/ia/pesosFormatoObjetivo';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -31,9 +36,13 @@ export interface MixCanal {
   justificativa?: string;
 }
 
+export type OrigemMixCanais = 'ia' | 'fallback_padrao';
+
 export interface RespostaMediaPlanner {
   mix: MixCanal[];
   racional: string;
+  /** Origem do mix agregado por canal (distinto da distribuição % por formato). */
+  origemMix: OrigemMixCanais;
 }
 
 export interface FormatoPlanoEntrada {
@@ -53,6 +62,137 @@ export interface RespostaDistribuicaoFormato {
 const FORMATO_CPM_DISPLAY_NATIVE = 'cpm - display e/ou native';
 const FORMATO_CPM_GAMA_DSP = 'cpm - gama dsp';
 
+/** Mix de referência por canal (fallback e direcional para IA). Percentuais somam 100. */
+const MIX_REFERENCIA_POR_OBJETIVO: Record<string, MixCanal[]> = {
+  awareness: [
+    { canal: 'display_programatico', percentual: 26 },
+    { canal: 'video_programatico', percentual: 32 },
+    { canal: 'ctv', percentual: 32 },
+    { canal: 'social_programatico', percentual: 10 },
+  ],
+  leads: [
+    { canal: 'social_programatico', percentual: 45 },
+    { canal: 'display_programatico', percentual: 45 },
+    { canal: 'crm_media', percentual: 10 },
+  ],
+  vendas: [
+    { canal: 'social_programatico', percentual: 45 },
+    { canal: 'display_programatico', percentual: 45 },
+    { canal: 'crm_media', percentual: 10 },
+  ],
+  consideracao: [
+    { canal: 'display_programatico', percentual: 55 },
+    { canal: 'video_programatico', percentual: 15 },
+    { canal: 'social_programatico', percentual: 25 },
+    { canal: 'ctv', percentual: 5 },
+  ],
+};
+
+/** Teto agregado de % de budget em linhas com modelo CPC, quando CPC está na seleção. */
+const TETO_CPC_AGREGADO_POR_OBJETIVO: Record<string, number> = {
+  leads: 10,
+  vendas: 10,
+  consideracao: 40,
+};
+
+function normalizarObjetivo(objetivo: string): string {
+  return (objetivo || '').trim().toLowerCase();
+}
+
+function obterMixReferenciaPorObjetivo(objetivo: string): MixCanal[] {
+  const chave = normalizarObjetivo(objetivo);
+  return MIX_REFERENCIA_POR_OBJETIVO[chave] ?? MIX_REFERENCIA_POR_OBJETIVO.consideracao;
+}
+
+function formatarMixReferenciaTexto(mix: MixCanal[]): string {
+  return mix.map((m) => `${m.canal} ~${m.percentual}%`).join(', ');
+}
+
+export function isModeloCompraCpc(modeloCompra: string): boolean {
+  const modelo = modeloCompra.toUpperCase();
+  return modelo === 'CPC' || modelo.startsWith('CPC_');
+}
+
+export function obterTetoAgregadoCpcPorObjetivo(objetivo: string): number | null {
+  const chave = normalizarObjetivo(objetivo);
+  return TETO_CPC_AGREGADO_POR_OBJETIVO[chave] ?? null;
+}
+
+/**
+ * Limita a soma de % em formatos CPC e redistribui o excedente entre os demais.
+ */
+export function aplicarTetoAgregadoCpc(
+  formatos: Array<FormatoPlanoEntrada & { percentual: number }>,
+  objetivo: string
+): Array<FormatoPlanoEntrada & { percentual: number }> {
+  const teto = obterTetoAgregadoCpcPorObjetivo(objetivo);
+  if (teto === null || formatos.length === 0) {
+    return formatos;
+  }
+
+  const indicesCpc: number[] = [];
+  const indicesOutros: number[] = [];
+  formatos.forEach((f, i) => {
+    if (isModeloCompraCpc(f.modeloCompra)) {
+      indicesCpc.push(i);
+    } else {
+      indicesOutros.push(i);
+    }
+  });
+  if (indicesCpc.length === 0) {
+    return formatos;
+  }
+
+  const somaCpc = indicesCpc.reduce((acc, i) => acc + formatos[i].percentual, 0);
+  if (somaCpc <= teto) {
+    return formatos;
+  }
+
+  const result = formatos.map((f) => ({ ...f }));
+  const fator = teto / somaCpc;
+  for (const i of indicesCpc) {
+    result[i].percentual *= fator;
+  }
+
+  const somaAtual = result.reduce((acc, f) => acc + f.percentual, 0);
+  const aRedistribuir = 100 - somaAtual;
+  const somaOutros = indicesOutros.reduce((acc, i) => acc + result[i].percentual, 0);
+
+  if (aRedistribuir > 0 && somaOutros > 0) {
+    for (const i of indicesOutros) {
+      result[i].percentual += (result[i].percentual / somaOutros) * aRedistribuir;
+    }
+  } else if (aRedistribuir > 0 && indicesOutros.length > 0) {
+    const parcela = aRedistribuir / indicesOutros.length;
+    for (const i of indicesOutros) {
+      result[i].percentual += parcela;
+    }
+  }
+
+  const somaFinal = result.reduce((acc, f) => acc + f.percentual, 0);
+  if (somaFinal > 0 && Math.abs(somaFinal - 100) > 0.01) {
+    return result.map((f) => ({ ...f, percentual: (f.percentual / somaFinal) * 100 }));
+  }
+  return result;
+}
+
+function obterDirecionalCpcPorObjetivo(objetivo: string): string {
+  const chave = normalizarObjetivo(objetivo);
+  if (chave === 'leads' || chave === 'vendas') {
+    return (
+      'Se houver formatos com modelo CPC na seleção, a soma de % destinada a eles deve ser no máximo 10% do budget. ' +
+      'Em leads/vendas a plataforma otimiza para CPL/CPA/vendas — CPC/CTR não deve dominar o plano.'
+    );
+  }
+  if (chave === 'consideracao') {
+    return (
+      'Se houver formatos CPC na seleção, até 40% do budget pode ir para eles (tráfego/consideração). ' +
+      'Acima disso, priorize CPM/CPV nas demais linhas.'
+    );
+  }
+  return '';
+}
+
 /**
  * Gera mix de mídia usando IA
  */
@@ -60,6 +200,7 @@ export async function gerarMixMidia(
   parametros: ParametrosMediaPlanner
 ): Promise<RespostaMediaPlanner> {
   const prompt = construirPromptMediaPlanner(parametros);
+  const mixReferencia = obterMixReferenciaPorObjetivo(parametros.objetivo);
 
   try {
     const response = await openai.chat.completions.create({
@@ -75,6 +216,14 @@ REGRAS OBRIGATÓRIAS:
 - Não invente canais fora da lista fornecida
 - Não sugira valores financeiros em reais, apenas percentuais
 - Retorne a resposta em JSON válido
+
+MIX DE REFERÊNCIA POR OBJETIVO (use como direcional; ajuste só se o briefing exigir e respeitando inventários disponíveis):
+- awareness: ${formatarMixReferenciaTexto(MIX_REFERENCIA_POR_OBJETIVO.awareness)}
+- leads / vendas: ${formatarMixReferenciaTexto(MIX_REFERENCIA_POR_OBJETIVO.leads)}
+- consideracao: ${formatarMixReferenciaTexto(MIX_REFERENCIA_POR_OBJETIVO.consideracao)}
+
+Para o objetivo desta campanha, referência: ${formatarMixReferenciaTexto(mixReferencia)}.
+${obterDirecionalCpcPorObjetivo(parametros.objetivo)}
 
 FORMATO DE RESPOSTA:
 {
@@ -111,11 +260,10 @@ FORMATO DE RESPOSTA:
       }));
     }
 
-    return resultado;
+    return { ...resultado, origemMix: 'ia' };
   } catch (error) {
     console.error('Erro ao gerar mix de mídia:', error);
-    // Retorna mix padrão em caso de erro
-    return gerarMixPadrao(parametros);
+    return { ...gerarMixPadrao(parametros), origemMix: 'fallback_padrao' };
   }
 }
 
@@ -151,13 +299,18 @@ Gere o mix de canais com percentuais de budget e um racional estratégico.`;
 }
 
 function obterOrientacaoPorObjetivo(objetivo: string): string {
+  const mixRef = obterMixReferenciaPorObjetivo(objetivo);
+  const base = `referência de mix por canal: ${formatarMixReferenciaTexto(mixRef)}`;
+  const cpc = obterDirecionalCpcPorObjetivo(objetivo);
   const orientacoes: Record<string, string> = {
-    awareness: 'mais peso em Display, Vídeo, CTV',
-    leads: 'mais peso em Social, Display, produtos CPL, CRM media',
-    vendas: 'priorizar canais com intenção mais alta e remarketing',
-    consideracao: 'equilibrar awareness e performance',
+    awareness:
+      `${base}. Priorize vídeo e CTV para alcance; display complementa frequência.`,
+    leads: `${base}. Foco em conversão (CPL/lead); ${cpc}`,
+    vendas: `${base}. Mesma lógica de leads: conversão acima de tráfego CPC. ${cpc}`,
+    consideracao: `${base}. Display e social para nurturing; ${cpc}`,
   };
-  return orientacoes[objetivo.toLowerCase()] ?? 'distribuição equilibrada';
+  const chave = normalizarObjetivo(objetivo);
+  return orientacoes[chave] ?? `${base}. Distribua entre os inventários disponíveis.`;
 }
 
 function obterOrientacaoPorMaturidade(maturidade: string): string {
@@ -182,47 +335,26 @@ function obterOrientacaoPorRisco(risco: string): string {
  * Gera mix padrão quando a IA falha
  */
 function gerarMixPadrao(parametros: ParametrosMediaPlanner): RespostaMediaPlanner {
-  const objetivo = parametros.objetivo.toLowerCase();
-  
-  let mix: MixCanal[] = [];
+  const inventariosNorm = new Set(
+    parametros.inventariosDisponiveis.map((c) => c.trim().toLowerCase())
+  );
 
-  if (objetivo === 'awareness') {
-    mix = [
-      { canal: 'display_programatico', percentual: 40 },
-      { canal: 'video_programatico', percentual: 30 },
-      { canal: 'ctv', percentual: 20 },
-      { canal: 'social_programatico', percentual: 10 },
-    ];
-  } else if (objetivo === 'leads') {
-    mix = [
-      { canal: 'social_programatico', percentual: 35 },
-      { canal: 'display_programatico', percentual: 30 },
-      { canal: 'cpl_cpi', percentual: 20 },
-      { canal: 'crm_media', percentual: 15 },
-    ];
-  } else {
-    // Mix equilibrado
-    mix = [
-      { canal: 'display_programatico', percentual: 35 },
-      { canal: 'video_programatico', percentual: 25 },
-      { canal: 'social_programatico', percentual: 25 },
-      { canal: 'ctv', percentual: 15 },
-    ];
-  }
+  let mix = obterMixReferenciaPorObjetivo(parametros.objetivo).filter((item) =>
+    inventariosNorm.has(item.canal.toLowerCase())
+  );
 
-  // Filtra apenas canais disponíveis
-  mix = mix.filter(item => parametros.inventariosDisponiveis.includes(item.canal));
-
-  // Normaliza para 100%
   const soma = mix.reduce((acc, item) => acc + item.percentual, 0);
-  mix = mix.map(item => ({
-    ...item,
-    percentual: (item.percentual / soma) * 100,
-  }));
+  if (soma > 0) {
+    mix = mix.map((item) => ({
+      ...item,
+      percentual: (item.percentual / soma) * 100,
+    }));
+  }
 
   return {
     mix,
-    racional: `Mix gerado automaticamente baseado no objetivo ${parametros.objetivo} e segmento ${parametros.segmento}.`,
+    racional: `Mix gerado automaticamente (referência Weach para ${parametros.objetivo}): ${formatarMixReferenciaTexto(obterMixReferenciaPorObjetivo(parametros.objetivo))}. Segmento: ${parametros.segmento}.`,
+    origemMix: 'fallback_padrao',
   };
 }
 
@@ -281,15 +413,20 @@ export async function gerarDistribuicaoBudgetPorFormato(
       messages: [
         {
           role: 'system',
-          content: `Você define percentuais de investimento POR FORMATO.
-          REGRAS:
-        - Soma dos percentuais = exatamente 100.
-        - Use cada índice 0,1,... exatamente uma vez (um percentual por formato da lista do usuário).
-        - Não crie formatos novos. Responda apenas JSON válido.
-        {
-          "alocacoes": [ { "indice": 0, "percentual": 40 }, ... ],
-          "racional": "Texto curto (2-4 frases) justificando a alocação."
-        }`,
+          content: `Você define percentuais de investimento POR FORMATO para campanhas Weach.
+
+REGRAS:
+- Soma dos percentuais = exatamente 100.
+- Use cada índice 0,1,... exatamente uma vez.
+- Não crie formatos novos. Responda apenas JSON válido.
+- Siga a TABELA DE PESOS do usuário (família + escala 1–5): formatos com peso 4–5 recebem mais budget; peso 1–2 recebem menos.
+- Em LEADS/VENDAS: priorize conversão rastreável (Lead Ad, CPL, CRM). CTV quase não converte lead — máximo ~5% somando todas as linhas CTV. Lead Ad > Social Tráfego.
+- Não justifique CTV alto em campanha de lead só por "alcance".
+
+{
+  "alocacoes": [ { "indice": 0, "percentual": 40 }, ... ],
+  "racional": "Texto curto (2-4 frases) justificando a alocação."
+}`,
         },
         { role: 'user', content: prompt },
       ],
@@ -344,7 +481,12 @@ export async function gerarDistribuicaoBudgetPorFormato(
       }));
 
     return {
-      formatos: aplicarRegraPesoDisplayMaiorQueGama(alocados),
+      formatos: aplicarRegraPesoDisplayMaiorQueGama(
+        aplicarLimitesEstrategicosFormatos(
+          aplicarTetoAgregadoCpc(alocados, params.objetivo),
+          params.objetivo
+        )
+      ),
       origem: 'ia',
       racional: typeof bruto.racional === 'string' ? bruto.racional : undefined,
     };
@@ -360,19 +502,15 @@ function construirPromptDistribuicaoFormato(params: {
   budgetTotal: number;
   formatos: FormatoPlanoEntrada[];
 }): string {
-  const linhas = params.formatos.map(
-    (f, i) =>
-      `  [${i}] ${f.canal} | ${f.formato} | ${f.modeloCompra}`
-  );
+  const tabelaPesos = montarTabelaPesosFormatoPrompt(params.formatos, params.objetivo);
   return `Defina a distribuição de budget (%) para cada linha. A soma deve ser 100.
 
 CAMPANHA: segmento ${params.segmento}, objetivo ${params.objetivo}, orçamento R$ ${params.budgetTotal.toLocaleString('pt-BR')}
 
-FORMATOS (cada um deve receber um %):
-${linhas.join('\n')}
+${tabelaPesos}
 
-Considere coerência entre objetivo, modelo de compra (CPM, CPV, CPL, etc.) e o tipo de mídia. Dê pesos DIFERENTES entre as linhas (evite 50/50 ou divisão igual) quando fizer sentido.
-REGRA OBRIGATÓRIA ADICIONAL: quando existir "CPM - Display e/ou Native" e "CPM - Gama DSP", o percentual de "CPM - Display e/ou Native" deve ser sempre maior.`;
+REGRA DISPLAY: quando existir "CPM - Display e/ou Native" e "CPM - Gama DSP", Native deve ter % maior que Gama.
+${obterDirecionalCpcPorObjetivo(params.objetivo) ? `REGRA CPC: ${obterDirecionalCpcPorObjetivo(params.objetivo)}` : ''}`;
 }
 
 function obterChavePesoModelo(modeloCompra: string): string {
@@ -403,14 +541,16 @@ function multiplicadorObjetivoParaChavePeso(
     return 1.0;
   }
   if (o === 'LEADS') {
+    if (m === 'CPC') { return 0.55; }
     if (
-      m === 'CPL' || m === 'CPC' || m === 'CPS' || m === 'CPA' || m === 'CPQL' ||
+      m === 'CPL' || m === 'CPS' || m === 'CPA' || m === 'CPQL' ||
       m.startsWith('CPQL_') || m.startsWith('CPL_')
     ) { return 1.25; }
     return 0.9;
   }
   if (o === 'VENDAS') {
-    if (m === 'CPC' || m === 'CPL' || m === 'CPS' || m === 'CPQL' || m.startsWith('CPQL_')) {
+    if (m === 'CPC') { return 0.55; }
+    if (m === 'CPL' || m === 'CPS' || m === 'CPQL' || m.startsWith('CPQL_')) {
       return 1.2;
     }
     return 0.95;
@@ -510,11 +650,7 @@ export function aplicarPesosENormalizar(
     return [{ ...formatos[0], percentual: 100 }];
   }
 
-  const pesos = formatos.map((f, i) => {
-    const w = pesoHeuristicoModeloEObjetivo(objetivo, f.modeloCompra);
-    // Quebra de empate determinística: ordem de entrada influencia c epsilon (nunca uniforme por empate puro)
-    return w * (1 + (i + 1) * 0.0001);
-  });
+  const pesos = formatos.map((f, i) => pesoFormatoParaObjetivo(f, objetivo, i));
   const somaPesos = pesos.reduce((a, b) => a + b, 0);
   if (somaPesos <= 0) {
     return formatos.map((f) => ({
@@ -527,6 +663,11 @@ export function aplicarPesosENormalizar(
     ...f,
     percentual: (pesos[i] / somaPesos) * 100,
   }));
-  return aplicarRegraPesoDisplayMaiorQueGama(distribuicaoBase);
+  return aplicarRegraPesoDisplayMaiorQueGama(
+    aplicarLimitesEstrategicosFormatos(
+      aplicarTetoAgregadoCpc(distribuicaoBase, objetivo),
+      objetivo
+    )
+  );
 }
 

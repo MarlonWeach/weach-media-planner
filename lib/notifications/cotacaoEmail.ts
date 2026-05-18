@@ -1,5 +1,9 @@
 import nodemailer from 'nodemailer';
-import { montarLinhasBriefingObservacoes, type BriefingLinha } from '@/lib/cotacao/briefingLinhas';
+import {
+  montarLinhasBriefingEmail,
+  montarLinhasBriefingObservacoes,
+  type BriefingLinha,
+} from '@/lib/cotacao/briefingLinhas';
 import { modeloCompraCrmPorFormato, precoUnitarioCrmPorFormato } from '@/lib/cotacao/precosMensageriaCrm';
 
 type DefinicaoCampanha = 'PERFORMANCE' | 'PROGRAMATICA' | 'WHATSAPP_SMS_PUSH';
@@ -238,70 +242,42 @@ function buildEmailBody(input: SendCotacaoEmailInput): string {
   const observacoesGerais = extrairObservacoesGerais(input.observacoes);
   const sectionDivider = '\n------------------------------------------------------------\n';
   const header = `Cotação ${input.cotacaoId} - ${input.clienteNome}`;
-  const campanha = [
-    `Segmento: ${input.clienteSegmento}`,
-    `Objetivo: ${input.objetivo}`,
-    `Budget: R$ ${input.budget.toLocaleString('pt-BR')}`,
-    `Região: ${input.regiao}`,
-    `Definição de campanha: ${
-      input.definicaoCampanha.length > 0 ? input.definicaoCampanha.join(', ') : 'Não informada'
-    }`,
-  ].join('\n');
 
-  const solicitante = [
-    `Solicitante: ${input.solicitanteNome || 'Não informado'}`,
-    `E-mail do solicitante: ${input.solicitanteEmail || 'Não informado'}`,
-    `Agência: ${input.agenciaNome || 'Não informada'}`,
-  ].join('\n');
-
-  const espelhoLinhas = montarLinhasBriefingObservacoes(input.observacoes);
+  const briefingLinhas = montarLinhasBriefingEmail(input.observacoes, {
+    cotacaoId: input.cotacaoId,
+    segmento: input.clienteSegmento,
+    budget: input.budget,
+  });
   const espelhoTexto = [
-    'Espelho completo do formulário (todas as perguntas e respostas):',
-    ...espelhoLinhas.map((row) => `  ${row.label}: ${row.value}`),
+    'Formulário e dados da cotação:',
+    ...briefingLinhas.map((row) => `  ${row.label}: ${row.value}`),
   ].join('\n');
 
   if (hasPerformance) {
     const observacoes = `Observações / contexto:\n${observacoesGerais}`;
-    return `${header}${sectionDivider}${campanha}${sectionDivider}${solicitante}${sectionDivider}${observacoes}${sectionDivider}${espelhoTexto}\n`;
+    return `${header}${sectionDivider}${observacoes}${sectionDivider}${espelhoTexto}\n`;
   }
 
   const linhasPlano = buildPlanoTexto(input);
-  return `${header}${sectionDivider}${campanha}${sectionDivider}${solicitante}${sectionDivider}${espelhoTexto}${sectionDivider}Plano de mídia:\n${linhasPlano}\n`;
+  return `${header}${sectionDivider}${espelhoTexto}${sectionDivider}Plano de mídia:\n${linhasPlano}\n`;
 }
 
 function buildEmailHtml(input: SendCotacaoEmailInput): string {
   const hasPerformance = input.definicaoCampanha.includes('PERFORMANCE');
-  const observacoesGerais = extrairObservacoesGerais(input.observacoes);
   const exibirMetricasLeads = ['LEADS', 'VENDAS'].includes(String(input.objetivo || ''));
-  const definicao =
-    input.definicaoCampanha.length > 0
-      ? input.definicaoCampanha.join(', ')
-      : 'Não informada';
 
-  const espelhoLinhas = montarLinhasBriefingObservacoes(input.observacoes);
-  const resumoLinhas: BriefingLinha[] = [
-    { label: 'ID da Cotação', value: input.cotacaoId },
-    { label: 'Nome do Anunciante / Campanha', value: input.clienteNome },
-    { label: 'Segmento', value: input.clienteSegmento },
-    { label: 'Objetivo (cadastro)', value: input.objetivo || '(Em branco)' },
-    { label: 'Budget', value: `R$ ${input.budget.toLocaleString('pt-BR')}` },
-    { label: 'Região', value: input.regiao },
-    { label: 'Definição de Campanha', value: definicao },
-    { label: 'Cotação é pró-ativa?', value: input.cotacaoProativa ? 'Sim' : 'Não' },
-    { label: 'Solicitante', value: input.solicitanteNome || 'Não informado' },
-    { label: 'E-mail do Solicitante', value: input.solicitanteEmail || 'Não informado' },
-    { label: 'Agência', value: input.agenciaNome || 'Não informada' },
-    { label: 'Observações Gerais (texto livre legado)', value: observacoesGerais },
-  ];
-
-  const todasLinhasResumoEspelho = [...resumoLinhas, ...espelhoLinhas];
+  const todasLinhasResumoEspelho = montarLinhasBriefingEmail(input.observacoes, {
+    cotacaoId: input.cotacaoId,
+    segmento: input.clienteSegmento,
+    budget: input.budget,
+  });
   const rowsHtml = briefingLinhasParaHtmlTabela(todasLinhasResumoEspelho);
 
   const briefingHtml = `
     <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.5;">
       <h2 style="margin:0 0 8px 0;">Formulário de Cotação - ${escapeHtml(input.clienteNome)}</h2>
       <p style="margin:0 0 16px 0;color:#4b5563;">
-        Cotação ${escapeHtml(input.cotacaoId)} enviada para análise comercial. A tabela abaixo inclui o resumo operacional e o espelho completo do formulário (programática, performance, cobertura, anexo e demais campos; respostas vazias aparecem como (Em branco)).
+        Cotação ${escapeHtml(input.cotacaoId)} enviada para análise comercial. A tabela abaixo espelha o formulário e os dados da cotação (sem repetir campos; respostas vazias aparecem como (Em branco)).
       </p>
       <table style="border-collapse:collapse;width:100%;max-width:980px;">
         <tbody>

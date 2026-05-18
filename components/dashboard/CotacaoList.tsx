@@ -230,10 +230,10 @@ export function CotacaoList({ userId }: CotacaoListProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h3 className="mb-4 text-lg font-semibold text-gray-900">Filtros</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">Buscar</label>
             <input
@@ -322,8 +322,8 @@ export function CotacaoList({ userId }: CotacaoListProps) {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-            <table className="min-w-[960px] w-full divide-y divide-gray-200 text-left text-sm">
+          <div className="-mx-px overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+            <table className="w-full min-w-[720px] divide-y divide-gray-200 text-left text-sm">
               <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
                 <tr>
                   <th className="whitespace-nowrap px-4 py-3">ID</th>

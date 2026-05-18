@@ -11,6 +11,7 @@ import { WizardStep1, Step1Data } from '@/components/cotacao/WizardStep1';
 import { WizardStep2, Step2Data } from '@/components/cotacao/WizardStep2';
 import { WizardStep3, Step3Data } from '@/components/cotacao/WizardStep3';
 import { WizardStep4 } from '@/components/cotacao/WizardStep4';
+import { extrairAuditoriaMotorDeMixSugerido } from '@/lib/cotacao/auditoriaMotorMix';
 import dayjs from 'dayjs';
 
 type WizardStep = 1 | 2 | 3 | 4;
@@ -40,6 +41,8 @@ export default function EditarCotacaoPage({
       preco?: number;
       entregaEstimada?: number;
     }>;
+    auditoriaMotor?: ReturnType<typeof extrairAuditoriaMotorDeMixSugerido> | null;
+    distribuicaoFormatos?: Record<string, unknown> | null;
   } | null>(null);
 
   useEffect(() => {
@@ -133,9 +136,36 @@ export default function EditarCotacaoPage({
         } as Step3Data,
       });
 
+      const msRaw = cotacao.mixSugerido;
+      const ms =
+        msRaw && typeof msRaw === 'object' && !Array.isArray(msRaw)
+          ? (msRaw as Record<string, unknown>)
+          : null;
+      const mixLinhas = Array.isArray(ms?.mix)
+        ? ms!.mix
+        : Array.isArray(msRaw)
+          ? msRaw
+          : [];
+      const distRaw = ms?.distribuicaoFormatos;
+      const distribuicaoFormatos =
+        distRaw && typeof distRaw === 'object' && !Array.isArray(distRaw)
+          ? (distRaw as Record<string, unknown>)
+          : null;
+
       setCotacaoExistente({
         id: cotacao.id,
-        mix: Array.isArray(cotacao.mixSugerido) ? cotacao.mixSugerido : [],
+        mix: mixLinhas as Array<{
+          canal?: string;
+          formato?: string;
+          modeloCompra?: string;
+          percentual?: number;
+          valorBudget?: number;
+          precoUnitario?: number;
+          preco?: number;
+          entregaEstimada?: number;
+        }>,
+        auditoriaMotor: cotacao.auditoriaMotor ?? extrairAuditoriaMotorDeMixSugerido(msRaw),
+        distribuicaoFormatos,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar cotação');

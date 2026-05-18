@@ -18,6 +18,7 @@ export interface PrecoDisplay {
   spotifyLeaderboard: number;
   spotifyOverlay: number;
   deezerDisplay: number;
+  geofenceDisplay3kmCpm?: number;
 }
 
 export interface PrecoVideo {
@@ -73,6 +74,7 @@ export function calcularPrecosDisplay(cpmBase: number, valoresFixos: {
   spotifyLeaderboard?: number;
   spotifyOverlay?: number;
   deezerDisplay?: number;
+  geofenceDisplay3kmCpm?: number;
 }): PrecoDisplay {
   return {
     cpmBase,
@@ -83,6 +85,9 @@ export function calcularPrecosDisplay(cpmBase: number, valoresFixos: {
     spotifyLeaderboard: valoresFixos.spotifyLeaderboard ?? 18,
     spotifyOverlay: valoresFixos.spotifyOverlay ?? 72,
     deezerDisplay: valoresFixos.deezerDisplay ?? 72,
+    ...(valoresFixos.geofenceDisplay3kmCpm !== undefined
+      ? { geofenceDisplay3kmCpm: valoresFixos.geofenceDisplay3kmCpm }
+      : {}),
   };
 }
 
@@ -125,9 +130,9 @@ export function calcularPrecosCTV(cpvVideo30: number, cpmBase: number, valoresFi
   return {
     cpvCtv30Open,
     cpvGloboFast,
-    cpvGloboPlay15: valoresFixos?.globoPlay15 ?? cpvVideo30 * 0.85,
-    cpvSamsungFast: valoresFixos?.samsungFast ?? cpvGloboFast,
-    cpvPhilipsAoc: valoresFixos?.philipsAoc ?? cpvGloboFast,
+    cpvGloboPlay15: valoresFixos?.globoPlay15 ?? calcularGloboPlay15(cpmBase),
+    cpvSamsungFast: valoresFixos?.samsungFast ?? calcularSamsungFast(cpmBase),
+    cpvPhilipsAoc: valoresFixos?.philipsAoc ?? calcularPhilipsAoc(cpmBase),
     /** Só preenchido por regra admin “MAX / Netflix / Disney+”; formatos HBO/Netflix/Disney no wizard usam Notion, não este valor. */
     cpvMaxNetflixDisney: valoresFixos?.maxNetflixDisney ?? 0,
   };
@@ -143,15 +148,61 @@ function calcularGloboFast(cpmBase: number): number {
   if (cpmBase === 7) return 0.20;
   if (cpmBase === 8) return 0.23;
   if (cpmBase === 9) return 0.25;
-  
-  // Interpolação linear para valores intermediários
+
   if (cpmBase < 4) return 0.17;
   if (cpmBase < 5) return 0.17 + (cpmBase - 4) * 0.03;
   if (cpmBase < 7) return 0.20;
   if (cpmBase < 8) return 0.20 + (cpmBase - 7) * 0.03;
   if (cpmBase < 9) return 0.23 + (cpmBase - 8) * 0.02;
-  
+
   return 0.25;
+}
+
+/** GloboPlay 15" CPCV — planilha */
+function calcularGloboPlay15(cpmBase: number): number {
+  if (cpmBase === 4) return 0.12;
+  if (cpmBase === 5) return 0.18;
+  if (cpmBase === 7) return 0.18;
+  if (cpmBase === 8) return 0.2;
+  if (cpmBase === 9) return 0.22;
+  if (cpmBase < 4) return 0.12;
+  if (cpmBase < 5) return 0.12 + (cpmBase - 4) * 0.06;
+  if (cpmBase < 7) return 0.18;
+  if (cpmBase < 8) return 0.18 + (cpmBase - 7) * 0.02;
+  if (cpmBase < 9) return 0.2 + (cpmBase - 8) * 0.02;
+  return 0.22;
+}
+
+/** Philips / AOC CPCV — planilha (distinto de Globo FAST) */
+function calcularPhilipsAoc(cpmBase: number): number {
+  if (cpmBase === 4) return 0.1;
+  if (cpmBase === 5) return 0.13;
+  if (cpmBase === 7) return 0.13;
+  if (cpmBase === 8) return 0.17;
+  if (cpmBase === 9) return 0.19;
+  if (cpmBase < 4) return 0.1;
+  if (cpmBase < 5) return 0.1 + (cpmBase - 4) * 0.03;
+  if (cpmBase < 7) return 0.13;
+  if (cpmBase < 8) return 0.13 + (cpmBase - 7) * 0.04;
+  if (cpmBase < 9) return 0.17 + (cpmBase - 8) * 0.02;
+  return 0.19;
+}
+
+/** Samsung FAST CPCV — planilha (distinto de Globo FAST) */
+function calcularSamsungFast(cpmBase: number): number {
+  if (cpmBase === 4) return 0.15;
+  if (cpmBase === 5) return 0.18;
+  if (cpmBase === 7) return 0.18;
+  if (cpmBase === 8) return 0.2;
+  if (cpmBase === 9) return 0.22;
+
+  if (cpmBase < 4) return 0.15;
+  if (cpmBase < 5) return 0.15 + (cpmBase - 4) * 0.03;
+  if (cpmBase < 7) return 0.18;
+  if (cpmBase < 8) return 0.18 + (cpmBase - 7) * 0.02;
+  if (cpmBase < 9) return 0.2 + (cpmBase - 8) * 0.02;
+
+  return 0.22;
 }
 
 /**
@@ -239,6 +290,30 @@ function calcularFbEngajamento(cpmBase: number): number {
   return 5;
 }
 
+/** Chaves vindas de `carregarValoresFixosPricing` (aliases antes de virar `Preco*`) */
+type CtvValoresFixosEntrada = Partial<PrecoCTV> & {
+  globoPlay15?: number;
+  samsungFast?: number;
+  philipsAoc?: number;
+  maxNetflixDisney?: number;
+};
+
+type VideoValoresFixosEntrada = Partial<PrecoVideo> & {
+  spotifyVideo30?: number;
+  deezerVideo30?: number;
+};
+
+type AudioValoresFixosEntrada = Partial<PrecoAudio> & {
+  spotifyAudio?: number;
+  deezerAudio?: number;
+};
+
+export interface PrecoCrm {
+  whatsappCpd?: number;
+  smsCpd?: number;
+  pushCpc?: number;
+}
+
 /**
  * Calcula todos os preços programáticos baseados no CPM base (D3)
  */
@@ -247,28 +322,30 @@ export function calcularTodosPrecosProgramaticos(
   valoresFixos?: {
     display?: Partial<PrecoDisplay>;
     video?: Partial<PrecoVideo>;
-    ctv?: Partial<PrecoCTV>;
+    ctv?: CtvValoresFixosEntrada;
     audio?: Partial<PrecoAudio>;
     social?: Partial<PrecoSocial>;
+    crm?: PrecoCrm;
   }
 ) {
-  const display = calcularPrecosDisplay(cpmBase, valoresFixos?.display ?? {});
-  const videoFix = valoresFixos?.video;
+  const displayFix = valoresFixos?.display ?? {};
+  const display = calcularPrecosDisplay(cpmBase, displayFix);
+  const videoFix: VideoValoresFixosEntrada | undefined = valoresFixos?.video;
   const video = calcularPrecosVideo(cpmBase, {
-    spotifyVideo30: videoFix?.cpvSpotifyVideo30,
-    deezerVideo30: videoFix?.cpvDeezerVideo30,
+    spotifyVideo30: videoFix?.spotifyVideo30 ?? videoFix?.cpvSpotifyVideo30,
+    deezerVideo30: videoFix?.deezerVideo30 ?? videoFix?.cpvDeezerVideo30,
   });
-  const ctvFix = valoresFixos?.ctv;
+  const ctvFix: CtvValoresFixosEntrada | undefined = valoresFixos?.ctv;
   const ctv = calcularPrecosCTV(video.cpvVideo30, cpmBase, {
-    globoPlay15: ctvFix?.cpvGloboPlay15,
-    samsungFast: ctvFix?.cpvSamsungFast,
-    philipsAoc: ctvFix?.cpvPhilipsAoc,
-    maxNetflixDisney: ctvFix?.cpvMaxNetflixDisney,
+    globoPlay15: ctvFix?.globoPlay15 ?? ctvFix?.cpvGloboPlay15,
+    samsungFast: ctvFix?.samsungFast ?? ctvFix?.cpvSamsungFast,
+    philipsAoc: ctvFix?.philipsAoc ?? ctvFix?.cpvPhilipsAoc,
+    maxNetflixDisney: ctvFix?.maxNetflixDisney ?? ctvFix?.cpvMaxNetflixDisney,
   });
-  const audioFix = valoresFixos?.audio;
+  const audioFix: AudioValoresFixosEntrada | undefined = valoresFixos?.audio;
   const audio = calcularPrecosAudio(video.cpvVideo30, {
-    spotifyAudio: audioFix?.spotifyAudioCpm,
-    deezerAudio: audioFix?.deezerAudioCpm,
+    spotifyAudio: audioFix?.spotifyAudio ?? audioFix?.spotifyAudioCpm,
+    deezerAudio: audioFix?.deezerAudio ?? audioFix?.deezerAudioCpm,
   });
   const socialFix = valoresFixos?.social;
   const social = calcularPrecosSocial(cpmBase, {
@@ -285,6 +362,7 @@ export function calcularTodosPrecosProgramaticos(
     ctv,
     audio,
     social,
+    crm: valoresFixos?.crm ?? {},
   };
 }
 

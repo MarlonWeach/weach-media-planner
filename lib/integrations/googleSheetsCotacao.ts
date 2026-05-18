@@ -1,5 +1,9 @@
 import { google } from 'googleapis';
 import { idCotacaoParaColunaSheets } from '@/lib/cotacao/idCotacao';
+import {
+  formatarDefinicaoCampanha,
+  formatarListaModelosMidia,
+} from '@/lib/cotacao/labelsModeloMidia';
 import { prisma } from '@/lib/prisma';
 
 interface SyncCotacaoInput {
@@ -116,8 +120,9 @@ function buildLegacyRow(input: SyncCotacaoInput): string[] {
   row[8] = periodStart && periodEnd ? `${periodStart} a ${periodEnd}` : ''; // I
   row[9] = tipoRegiao && tipoRegiao !== 'NACIONAL' ? 'Sim' : 'Não'; // J
   row[10] = getBoolean(payload, ['solicitacao', 'cotacaoProativa']) ? 'Sim' : 'Não'; // K
-  row[11] = definicaoCampanha.join(', '); // L
-  row[12] = modelosPerformance.join(', '); // M (performance)
+  row[11] = formatarDefinicaoCampanha(definicaoCampanha) || definicaoCampanha.join(', '); // L
+  row[12] =
+    formatarListaModelosMidia(modelosPerformance) || modelosPerformance.join(', '); // M (performance)
   row[13] = toCellValue(input.budget); // N unificado
   row[14] = getString(payload, ['estrategia', 'performance', 'cplCamposCadastro']); // O
   row[15] = getString(payload, ['estrategia', 'performance', 'cplQualFiltro']); // P
@@ -127,13 +132,15 @@ function buildLegacyRow(input: SyncCotacaoInput): string[] {
   row[17] = [outrasRedes, quaisRedes].filter(Boolean).join(' - '); // R
   row[18] = getString(payload, ['estrategia', 'performance', 'clienteValorSugerido']); // S
   row[19] = observacoesGerais; // T (unificado)
-  row[20] = modelosProgramatica.join(', '); // U (programática)
+  row[20] =
+    formatarListaModelosMidia(modelosProgramatica) || modelosProgramatica.join(', '); // U (programática)
   row[21] = getString(payload, ['estrategia', 'programatica', 'formatosPretendidos']); // V (texto livre)
   row[22] = getString(payload, ['estrategia', 'programatica', 'segmentacaoExigida']); // W
   row[23] = ''; // X descontinuado
   row[24] = getString(payload, ['estrategia', 'programatica', 'kpiObjetivo']); // Y
   row[25] = getString(payload, ['solicitacao', 'anexoDriveLink']); // Z anexo único por link
-  row[26] = servicosMensageria.join(', '); // AA
+  row[26] =
+    formatarListaModelosMidia(servicosMensageria) || servicosMensageria.join(', '); // AA
   row[27] = ''; // AB descontinuado (unificado em T)
   row[28] = ''; // AC descontinuado (unificado em N)
   row[29] = ''; // AD descontinuado (unificado em T)

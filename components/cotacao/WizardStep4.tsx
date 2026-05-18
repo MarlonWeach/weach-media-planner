@@ -20,6 +20,7 @@ import {
 } from '@/lib/cotacao/precosMensageriaCrm';
 import { formatoCpvStreamersApenasNotion } from '@/lib/cotacao/formatosPrecoNotion';
 import { montarNomeArquivoPlanoMidiaXlsx } from '@/lib/cotacao/nomeArquivoPlanoMidia';
+import type { AuditoriaMotorCotacao } from '@/lib/cotacao/auditoriaMotorMix';
 import { obterCvrPercentualCpvParaExibicao } from '@/lib/cotacao/planoMidiaTabelaComercial';
 
 interface MixCanal {
@@ -183,6 +184,18 @@ interface WizardStep4Props {
       preco?: number;
       entregaEstimada?: number;
     }>;
+    auditoriaMotor?: AuditoriaMotorCotacao | null;
+    /** Trecho persistido em `mixSugerido.distribuicaoFormatos` para reenviar no rascunho. */
+    distribuicaoFormatos?: {
+      origem?: string;
+      racional?: string;
+      formatos?: Array<{
+        canal: string;
+        formato: string;
+        modeloCompra: string;
+        percentual: number;
+      }>;
+    } | null;
   } | null;
 }
 
@@ -201,6 +214,7 @@ export function WizardStep4({
     racional?: string;
     formatos?: Array<{ canal: string; formato: string; modeloCompra: string; percentual: number }>;
   } | null>(null);
+  const [motorAuditoria, setMotorAuditoria] = useState<AuditoriaMotorCotacao | null>(null);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [baixandoExcel, setBaixandoExcel] = useState(false);
   const [erroAjuste, setErroAjuste] = useState<string | null>(null);
@@ -343,6 +357,12 @@ export function WizardStep4({
 
     setCotacaoId(cotacaoExistente.id);
     setItemsPlano(itensRestaurados);
+    if (cotacaoExistente.auditoriaMotor) {
+      setMotorAuditoria(cotacaoExistente.auditoriaMotor);
+    }
+    if (cotacaoExistente.distribuicaoFormatos) {
+      setDistribuicaoFormatosMeta(cotacaoExistente.distribuicaoFormatos);
+    }
     return itensRestaurados.length > 0;
   };
 
@@ -425,6 +445,9 @@ export function WizardStep4({
 
       const data = await response.json();
       setCotacaoId(data.cotacao.id);
+      if (data.cotacao.auditoriaMotor) {
+        setMotorAuditoria(data.cotacao.auditoriaMotor);
+      }
       if (data.cotacao.distribuicaoFormatos) {
         setDistribuicaoFormatosMeta(data.cotacao.distribuicaoFormatos);
       }
@@ -1382,6 +1405,19 @@ export function WizardStep4({
     String(dadosPassos?.step2?.objetivo || '')
   );
 
+  const labelAuditoriaMix = (origem: string | null | undefined) =>
+    origem === 'ia'
+      ? 'OpenAI (gpt-4o-mini)'
+      : origem === 'fallback_padrao'
+        ? 'Regra padrão interna (fallback)'
+        : null;
+  const labelAuditoriaDistrib = (origem: string | null | undefined) =>
+    origem === 'ia'
+      ? 'OpenAI (gpt-4o-mini)'
+      : origem === 'fallback_pesos'
+        ? 'Pesos determinísticos por modelo e objetivo (fallback)'
+        : null;
+
   if (loading) {
     return (
       <div className="text-center py-12">
@@ -1474,6 +1510,48 @@ export function WizardStep4({
               : 'Revise o plano de mídia gerado e faça ajustes se necessário'}
         </p>
       </div>
+
+      {(() => {
+        const origemMix = motorAuditoria?.mixCanais.origem;
+        const origemDist =
+          motorAuditoria?.distribuicaoPorFormato.origem ??
+          (distribuicaoFormatosMeta?.origem === 'ia' ||
+          distribuicaoFormatosMeta?.origem === 'fallback_pesos'
+            ? distribuicaoFormatosMeta.origem
+            : null);
+        const racionalDist =
+          motorAuditoria?.distribuicaoPorFormato.racional?.trim() ||
+          distribuicaoFormatosMeta?.racional?.trim() ||
+          null;
+        const txtMix = labelAuditoriaMix(origemMix);
+        const txtDist = labelAuditoriaDistrib(origemDist);
+        if (!txtMix && !txtDist && !racionalDist) return null;
+        return (
+          <details className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
+            <summary className="cursor-pointer font-semibold text-slate-900">
+              Como o plano foi gerado (auditoria)
+            </summary>
+            <ul className="mt-3 list-inside list-disc space-y-1.5 border-t border-slate-200/90 pt-3 text-slate-700">
+              {txtMix ? (
+                <li>
+                  <span className="font-medium">Mix por canal:</span> {txtMix}
+                </li>
+              ) : null}
+              {txtDist ? (
+                <li>
+                  <span className="font-medium">% investimento por formato:</span> {txtDist}
+                </li>
+              ) : null}
+              {racionalDist ? (
+                <li className="list-none pl-0">
+                  <span className="font-medium">Racional (% por formato):</span>
+                  <span className="mt-1 block whitespace-pre-wrap text-slate-600">{racionalDist}</span>
+                </li>
+              ) : null}
+            </ul>
+          </details>
+        );
+      })()}
 
       {/* Estimativas */}
       {!apenasPerformanceNoWizard && itemsPlano.length > 0 && itemsPlano[0].estimativas && (

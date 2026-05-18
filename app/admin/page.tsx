@@ -101,6 +101,13 @@ export default function AdminPage() {
       color: 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100',
     },
     {
+      title: 'Relatórios comerciais',
+      description: 'Insights de cotações, segmentos, mix e taxa de aceite',
+      href: '/relatorios',
+      icon: '📈',
+      color: 'bg-teal-50 border-teal-200 hover:bg-teal-100',
+    },
+    {
       title: 'Fila Performance',
       description: 'Cotações aguardando decisão interna da operação',
       href: '/admin/performance-fila',

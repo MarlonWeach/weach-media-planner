@@ -24,6 +24,11 @@ export interface PrecosCalculados {
   ctv: any;
   audio: any;
   social: any;
+  crm?: {
+    whatsappCpd?: number;
+    smsCpd?: number;
+    pushCpc?: number;
+  };
   descontoAplicado: number;
   multiplicadorRegional: number;
   cpmBaseAplicado: number;

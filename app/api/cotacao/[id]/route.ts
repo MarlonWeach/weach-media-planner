@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { extrairAuditoriaMotorDeMixSugerido } from '@/lib/cotacao/auditoriaMotorMix';
 import { isIdCotacaoValido } from '@/lib/cotacao/idCotacao';
 import { obterUserIdDoRequest, podeAcessarCotacao, usuarioTemRole } from '@/lib/utils/auth';
 
@@ -128,6 +129,7 @@ export async function GET(
           createdAt: log.createdAt,
           usuario: log.usuario,
         })),
+        auditoriaMotor: extrairAuditoriaMotorDeMixSugerido(cotacao.mixSugerido),
       },
     };
 

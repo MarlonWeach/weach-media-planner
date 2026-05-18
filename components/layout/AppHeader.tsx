@@ -32,9 +32,14 @@ export function AppHeader() {
               Home
             </Link>
             {isAuthenticated && !loading && (
-              <Link href="/dashboard" className="rounded-md px-2 py-1.5 hover:bg-white/10">
-                Dashboard
-              </Link>
+              <>
+                <Link href="/dashboard" className="rounded-md px-2 py-1.5 hover:bg-white/10">
+                  Dashboard
+                </Link>
+                <Link href="/relatorios" className="rounded-md px-2 py-1.5 hover:bg-white/10">
+                  Relatórios
+                </Link>
+              </>
             )}
             {isAdmin && (
               <Link href="/admin" className="rounded-md px-2 py-1.5 hover:bg-white/10">

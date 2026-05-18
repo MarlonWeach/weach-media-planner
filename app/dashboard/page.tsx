@@ -38,8 +38,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="bg-gray-50 py-8">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div className="min-w-0 bg-gray-50 py-8">
+      <div className="mx-auto w-full max-w-7xl min-w-0 px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="mb-2 text-3xl font-bold text-primary-dark">Dashboard</h1>

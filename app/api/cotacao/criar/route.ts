@@ -12,6 +12,7 @@ import { gerarExplicacaoComercial } from '@/lib/ia/explainer';
 import { validarPlanoMidia } from '@/lib/ia/validator';
 import { obterUserIdDoRequest } from '@/lib/utils/auth';
 import { obterProximoIdCotacao } from '@/lib/cotacao/sequencial';
+import { extrairAuditoriaMotorDeMixSugerido } from '@/lib/cotacao/auditoriaMotorMix';
 import type { Prisma } from '@prisma/client';
 import { zSegmentoCotacao } from '@/lib/cotacao/segmentosCotacao';
 
@@ -303,6 +304,11 @@ export async function POST(request: NextRequest) {
         explicacaoComercial,
         validacao,
         distribuicaoFormatos,
+        auditoriaMotor: extrairAuditoriaMotorDeMixSugerido({
+          ...mixResultado,
+          mix: mixNormalizado,
+          distribuicaoFormatos,
+        }),
       },
     });
   } catch (error) {
